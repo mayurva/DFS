@@ -1,0 +1,36 @@
+1. getattr
+
+2. mknod	
+
+3. mkdir	
+
+4. open	
+
+5. read		
+
+6. write
+
+8. readdir (getdir)	 
+
+9. access	
+
+10. chmod	
+
+11. chown	
+
+12. create
+
+13. utime	
+
+14. rename	
+
+15. rmdir	
+
+16. symlink		
+
+17. link	
+
+18. unlink
+
+19. readlink	
+
