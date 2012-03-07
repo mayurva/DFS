@@ -1,3 +1,15 @@
+Flows:
+Namespace
+Create File
+Open File
+Read file
+Append File
+
+Delete File
+make dir
+readdir
+delete dir
+
 1. getattr
 
 2. mknod	
@@ -14,10 +26,6 @@
 
 9. access	
 
-10. chmod	
-
-11. chown	
-
 12. create
 
 13. utime	
@@ -25,6 +33,13 @@
 14. rename	
 
 15. rmdir	
+
+
+
+he sagle skip karu shakto
+10. chmod	
+
+11. chown	
 
 16. symlink		
 
