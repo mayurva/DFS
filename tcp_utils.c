@@ -7,7 +7,7 @@
 #include<ifaddrs.h>
 #include<net/if.h>
 #include<sys/time.h>
-#include"dfs.h"
+#include"gfs.h"
 
 int getRandom(int lower,int upper)
 {
@@ -19,67 +19,14 @@ int getRandom(int lower,int upper)
 	return ((rand()%(upper-lower))+lower);
 }
 
-server populatePublicIp(server si)
+int populateIp(host *h,char *hostname)
 {
-
-	struct ifaddrs *myaddrs, *ifa;
-	void *in_addr;
-	char buf[64], intf[128];
-
-	strcpy(si.iface_name, "");
-
-	if(getifaddrs(&myaddrs) != 0) {
-		printf("getifaddrs failed! \n");
-		exit(-1);
+	struct hostent *lh = gethostbyname(hostname);
+	if(lh){
+		strcpy(h->ip_addr,lh->h_name);
+		return 0;
 	}
-
-	for (ifa = myaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-
-		if (ifa->ifa_addr == NULL)
-			continue;
-
-		if (!(ifa->ifa_flags & IFF_UP))
-			continue;
-
-		switch (ifa->ifa_addr->sa_family) {
-        
-			case AF_INET: { 
-				struct sockaddr_in *s4 = (struct sockaddr_in *)ifa->ifa_addr;
-				in_addr = &s4->sin_addr;
-				break;
-			}
-
-			case AF_INET6: {
-				struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ifa->ifa_addr;
-				in_addr = &s6->sin6_addr;
-				break;
-			}
-
-			default:
-				continue;
-		}
-
-		if (inet_ntop(ifa->ifa_addr->sa_family, in_addr, buf, sizeof(buf))) {
-			if ( ifa->ifa_addr->sa_family == AF_INET && strcmp(ifa->ifa_name, "lo")!=0 ) {
-				#ifdef DEBUG
-					printf("Server is binding to %s interface\n", ifa->ifa_name);
-				#endif
-				sprintf(si.ip_addr, "%s", buf);
-				sprintf(si.iface_name, "%s", ifa->ifa_name);
-			}
-		}
-	}
-
-	freeifaddrs(myaddrs);
-	
-	if ( strcmp(si.iface_name, "") == 0 ) {
-		printf("Either no Interface is up or you did not select any interface ..... \nserver Exiting .... \n\n");
-		exit(0);
-	}
-	#ifdef DEBUG
-		printf("\n\nMy public interface and IP is:  %s %s\n\n", si.iface_name, si.ip_addr);
-	#endif
-	return si;
+	return -1;
 }
 
 void listenSocket(int soc)
@@ -88,7 +35,7 @@ void listenSocket(int soc)
 		printf("Listen for connection\n");
 	#endif
 
-        if(listen(soc,MAX_CLIENTS+2) == -1) {
+        if(listen(soc,MAX_CLIENTS) == -1) {
                 printf("listen error\n");
                 exit(-1);
         }
@@ -116,7 +63,7 @@ int acceptConnection(int soc)
 	return conn_port;
 }
 
-int createConnection(server si,int conn_socket)
+int createConnection(host h,int conn_socket)
 {
         struct sockaddr_in sock_client;
 	int slen = sizeof(sock_client);
@@ -125,13 +72,13 @@ int createConnection(server si,int conn_socket)
         memset((char *) &sock_client, 0, sizeof(sock_client));
 	
 	#ifdef DEBUG
-		printf("Connecting to a server\nIP Addr: %s\nport: %d\n",si.ip_addr,si.listen_soc);
+		printf("Connecting to a server\nIP Addr: %s\nport: %d\n",h.ip_addr,h.port);
 		printf("Connection socket is %d\n",conn_socket);
 	#endif
 
         sock_client.sin_family = AF_INET;
-        sock_client.sin_port = htons(si.listen_soc);
-	ret = inet_pton(AF_INET, si.ip_addr, (void *) &sock_client.sin_addr);
+        sock_client.sin_port = htons(h.port);
+	ret = inet_pton(AF_INET, h.ip_addr, (void *) &sock_client.sin_addr);
 
 	ret = connect(conn_socket, (struct sockaddr *) &sock_client, slen);
 	if (ret == -1) {
@@ -159,11 +106,13 @@ int createSocket()
 
 int bindSocket(int soc, int listen_port, char ip_addr[])
 {
+        int optval = 1;
 	struct sockaddr_in sock_server;	
 	memset((char *) &sock_server, 0, sizeof(sock_server));
 	sock_server.sin_family = AF_INET;
 	sock_server.sin_port = htons(listen_port);
 	sock_server.sin_addr.s_addr = inet_addr(ip_addr);
+        setsockopt(soc, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
 	while (bind(soc, (struct sockaddr *) &sock_server, sizeof(sock_server)) == -1) {
 		listen_port = getRandom(64500,65636);
 		sock_server.sin_port = htons(listen_port);

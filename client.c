@@ -7,68 +7,19 @@
 
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
-/*	int res;
-	int rf=0;
+	int ret;
+	//strcpy(filepath,rootpath);
+	//strcat(filepath,filename);
+	//send a message to master
+	//reply from master
+	//if failure return -errno
+	//copy the data into stbuf (if required)
+	return 0;
+/*	
 //client side code goes here
 
-	struct stat temp_stbuf;
-        FILE *fp;
-        char *fname;
-	char *cachefile;	
-	printf("Inside getattr Path is: %s\n",path);
-	cachefile = (char*)malloc(strlen(rootpath)+strlen(path)+10);
-	strcpy(cachefile,rootpath);
-	strcat(cachefile,path);
-	strcat(cachefile,".attrib");
-	//cachefile[0]='.';
-	printf("cache file is %s\n",cachefile);
-	fp = fopen(cachefile,"rb");	
-	if(fp!=NULL)
-	{
-		rf = fread(&temp_stbuf,sizeof(temp_stbuf),1,fp);
-		fclose(fp);
-	}
-
-	if(!rf)
-	{
-		printf("data not cached\n");
-		memset(tcp_buf,0,MAXLEN);
-		sprintf(tcp_buf,"GETATTR\n%s\n",path);
-		printf("path copied\n%s\n",tcp_buf);
-		//res=lstat(path,stbuf);
-
-//tcp code goes here
-		send(sock,tcp_buf,strlen(tcp_buf),0);
-		memset(tcp_buf,0,MAXLEN);
-		recv(sock,tcp_buf,MAXLEN,0);
-		printf("recvd\n");
-
-		a = strtok(tcp_buf,"\n");
-		if(strcmp(a,"FAIL")==0)
-		{
-			printf("getattr failed\n");
-			a = strtok(NULL,"\n");
-			errno = atoi(a);
-			return -errno;
-		}
-
-		printf("%s\n",a);
-		memset(tcp_buf,0,MAXLEN);
-		strcpy(tcp_buf,"ACK\n");
 		send(sock,tcp_buf,strlen(tcp_buf),0);
 		recv(sock,(char *)&temp_stbuf,sizeof(struct stat),0);
-		printf("Received stbuf\n");	
-
-		fp = fopen(cachefile,"wb+");	
-		if(fp!=NULL)
-		{
-			rf = fwrite(&temp_stbuf,sizeof(temp_stbuf),1,fp);
-			fclose(fp);
-		}
-	}
-	else
-		printf("cached data found\n%s\n",cachefile);
-//rest of the code goes here
 
 	stbuf->st_dev = temp_stbuf.st_dev;
 	stbuf->st_ino = temp_stbuf.st_ino;
@@ -84,79 +35,44 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	stbuf->st_mtime = temp_stbuf.st_mtime;
 	stbuf->st_ctime = temp_stbuf.st_ctime;
 
-//	printf("User id %d\n",stbuf->st_uid);
-
-	printf("End of getattr\n");
-	return 0;
 */
 }
 
 static int gfs_mkdir(const char *path, mode_t mode)
 {
-/*        int res;
-	//client side code goes here
-        printf("Inside mkdir Path is: %s\n",path);
-        memset(tcp_buf,0,MAXLEN);
-        sprintf(tcp_buf,"MKDIR\n%s\n",path);
+        int ret;
+        //strcpy(filepath,rootpath);
+        //strcat(filepath,filename);
+        //send a message to master
+        //reply from master
+        //if failure return -errno
+        return 0;
+/*
 
 	//tcp code goes here
         send(sock,tcp_buf,strlen(tcp_buf),0);
         recv(sock,tcp_buf,MAXLEN,0);
 
-        send(sock,(char*)&mode,sizeof(mode_t),0);
-
-        memset(tcp_buf,0,MAXLEN);
-        recv(sock,tcp_buf,MAXLEN,0);
-        printf("Received message: %s\n",tcp_buf);
-
-        a = strtok(tcp_buf,"\n");
-        a = strtok(NULL,"\n");
-        res = atoi(a);
-        printf("End of mkdir\n");
         return res;*/
 }
 
 static int gfs_open(const char *path, struct fuse_file_info *fi)
 {
-/*  int ret=0;
-  printf("Inside open Path is: %s\n",path);
-        memset(tcp_buf,0,MAXLEN);
-        sprintf(tcp_buf,"OPEN\n%s",path);
+        int ret;
+        //strcpy(filepath,rootpath);
+        //strcat(filepath,filename);
+        //send a message to master
+        //reply from master
+        //if failure return -errno
+        return 0;
 
-//tcp code goes here
+/*  int ret=0;
 
         send(sock,tcp_buf,strlen(tcp_buf),0);
         memset(tcp_buf,0,MAXLEN);
         recv(sock,tcp_buf,MAXLEN,0);
 
-        memset(tcp_buf,0,MAXLEN);
-        sprintf(tcp_buf,"%d",fi->flags);
-        send(sock,tcp_buf,strlen(tcp_buf),0);
-        memset(tcp_buf,0,MAXLEN);
-        int res=recv(sock,tcp_buf,MAXLEN,0);
-        if(res<0){
-          printf("\nError receiving flags");
-          exit(1);
-        }
-        tcp_buf[res]='\0';
 
-        if(strcmp(tcp_buf,"failed")==0)
-          {
-          printf("sending errno");fflush(stdout);
-            send(sock,tcp_buf,strlen(tcp_buf),0);
-            memset(tcp_buf,0,MAXLEN);
-            res=recv(sock,tcp_buf,MAXLEN,0);
-            if(res<0){
-              printf("\nError receiving flags");
-              exit(1);
-            }
-            tcp_buf[res]='\0';
-            ret=atoi(tcp_buf);
-          }
-
-        //      if(strcmp(tcp_buf,"success")!=0)
-        printf("\n%s\n",tcp_buf);
-        printf("End of open\n");
         return ret;*/
 }
 

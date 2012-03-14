@@ -5,12 +5,10 @@
 #include<sys/stat.h>
 #include<search.h>
 
-#define NUM_CHUNKSERVERS 4
+#define CLIENT_LISTEN_PORT 5000
+#define CHUNKSERVER_LISTEN_PORT 6000
 
-typedef struct chunk_server_ {
-	char	ip[20];
-	int	port;
-}chunk_server;	
+#define NUM_CHUNKSERVERS 4
 
 typedef struct file_info_ {
 	struct hsearch_data	*chunk_list;

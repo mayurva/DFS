@@ -1,17 +1,21 @@
 //This file contains main code for the master server.
 #include<stdio.h>
+#include<stdlib.h>
 #include"gfs.h"
 #include"master.h"
 
 struct hsearch_data *file_list;
-int master_listen_socket;
-chunk_server	chunk_servers[NUM_CHUNKSERVERS];
+host master;
+int client_listen_socket;
+int chunkserver_listen_socket;
+host chunk_servers[NUM_CHUNKSERVERS];
 
 
 int master_init()
 {
 	/* Create hashtable */
-	file_list = (struct hsearch_data*) calloc(1, sizeof(struct hsearch_data));
+	//ERROR: he ase sizeof chalat nahiye
+	file_list = NULL; //(struct hsearch_data*)calloc(1, sizeof(struct hsearch_data)); 
 	if (file_list == NULL) {
 		printf("\n %s : Not enough memory", __func__);
 		return -1;
@@ -32,15 +36,16 @@ int master_init()
         }
 	int i = 0;
 	while (!feof(config_file)) {
-		fscanf(config_file, "%s %d\n", chunk_servers[i].ip, chunk_servers[i].port);
+		fscanf(config_file, "%s %d\n", chunk_servers[i].ip_addr, &chunk_servers[i].port);
 		i++;
 	}
 
 	/* Create master listen socket */
-	int optval = 1;
-	master_listen_socket = createSocket();
-	setsockopt(master_listen_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
-	bindSocket(master_listen_socket, LISTEN_PORT, MY_IP_ADDRESS);	
+	populateIp(&master,"localhost");
+	client_listen_socket = createSocket();
+	bindSocket(client_listen_socket, CLIENT_LISTEN_PORT, master.ip_addr);	
+	chunkserver_listen_socket = createSocket();
+	bindSocket(chunkserver_listen_socket, CHUNKSERVER_LISTEN_PORT, master.ip_addr);	
 	return 0;
 }
 
