@@ -9,6 +9,10 @@
 #define CHUNKSERVER_LISTEN_PORT 6000
 
 #define NUM_CHUNKSERVERS 4
+typedef struct chunkserver_{
+	host h;
+	int is_up;
+}chunkserver;
 
 typedef struct file_info_ {
 	struct hsearch_data	*chunk_list;

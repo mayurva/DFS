@@ -78,6 +78,15 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
+	int ret;
+	//strcpy(filepath,rootpath);
+        //strcat(filepath,filename);
+        //send a message to master
+        //reply from master
+	//send a read request to chunkserver
+	//reply from chunkserver
+        //if failure return -errno
+	return 0;
 /*  printf("Inside read. Path is: %s buf is %s",path,buf);
         memset(tcp_buf,0,MAXLEN);
         sprintf(tcp_buf,"READ\n%s",path);
@@ -259,6 +268,16 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 
 static int gfs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi)
 {
+        int ret;
+        //strcpy(filepath,rootpath);
+        //strcat(filepath,filename);
+        //send a message to master
+        //reply from master
+        //send a write (append) request to chunkserver
+        //reply from chunkserver
+        //if failure return -errno
+        return 0;
+
 /*	printf("Inside write. Path is: %s buf is %s",path,buf);
         memset(tcp_buf,0,MAXLEN);
         sprintf(tcp_buf,"WRITE\n%s",path);

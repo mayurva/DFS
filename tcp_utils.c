@@ -23,13 +23,13 @@ int populateIp(host *h,char *hostname)
 {
 	struct hostent *lh = gethostbyname(hostname);
 	if(lh){
-		strcpy(h->ip_addr,lh->h_name);
+		strcpy(h->ip_addr,inet_ntoa( *( struct in_addr*)( lh -> h_addr_list[0])));
 		return 0;
 	}
 	return -1;
 }
 
-void listenSocket(int soc)
+int listenSocket(int soc)
 {
 	#ifdef DEBUG
 		printf("Listen for connection\n");
@@ -37,12 +37,13 @@ void listenSocket(int soc)
 
         if(listen(soc,MAX_CLIENTS) == -1) {
                 printf("listen error\n");
-                exit(-1);
+                return -1;
         }
 
 	#ifdef DEBUG
 		printf("Out of Listen\n");
 	#endif
+	return 0;
 }
 
 int acceptConnection(int soc)
@@ -53,7 +54,7 @@ int acceptConnection(int soc)
 	
 	if ((conn_port = accept(soc, (struct sockaddr *) &sock_client, &slen)) == -1) {
 		printf("accept call failed! \n");
-		exit(-1);
+		return -1;
 	}
 	
 	#ifdef DEBUG
@@ -83,12 +84,13 @@ int createConnection(host h,int conn_socket)
 	ret = connect(conn_socket, (struct sockaddr *) &sock_client, slen);
 	if (ret == -1) {
 		printf("Connect failed! Check the IP and port number of the Server! \n");
-		exit(-1);
+		return -1;
 	}
 	
 	#ifdef DEBUG
 		printf("Connected to the server\n");
 	#endif
+	return 0;
 }
 
 int createSocket()
