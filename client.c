@@ -8,12 +8,12 @@
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
-	//strcpy(filepath,rootpath);
-	//strcat(filepath,filename);
-	//send a message to master
-	//reply from master
-	//if failure return -errno
-	//copy the data into stbuf (if required)
+	/*strcpy(filepath,rootpath);
+	strcat(filepath,filename);
+	send a message to master
+	reply from master
+	if failure return -errno
+	copy the data into stbuf (if required)*/
 	return 0;
 /*	
 //client side code goes here
@@ -41,11 +41,11 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 static int gfs_mkdir(const char *path, mode_t mode)
 {
         int ret;
-        //strcpy(filepath,rootpath);
-        //strcat(filepath,filename);
-        //send a message to master
-        //reply from master
-        //if failure return -errno
+        /*strcpy(filepath,rootpath);
+        strcat(filepath,filename);
+        send a message to master
+        reply from master
+        if failure return -errno*/
         return 0;
 /*
 
@@ -59,11 +59,11 @@ static int gfs_mkdir(const char *path, mode_t mode)
 static int gfs_open(const char *path, struct fuse_file_info *fi)
 {
         int ret;
-        //strcpy(filepath,rootpath);
-        //strcat(filepath,filename);
-        //send a message to master
-        //reply from master
-        //if failure return -errno
+        /*strcpy(filepath,rootpath);
+        strcat(filepath,filename);
+        send a message to master
+        reply from master
+        if failure return -errno*/
         return 0;
 
 /*  int ret=0;
@@ -79,43 +79,32 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
 	int ret;
-	//strcpy(filepath,rootpath);
-        //strcat(filepath,filename);
-        //send a message to master
-        //reply from master
-	//send a read request to chunkserver
-	//reply from chunkserver
-        //if failure return -errno
+	/*strcpy(filepath,rootpath);
+        strcat(filepath,filename);
+	find the number of blocks and corresponding block numbers to be read.
+	for each block to be read.. {
+	        send a message to master with file name and block number
+		reply from master with chunk id and chunk server details (ip and port I suppose)
+		send a read request to chunkserver
+		reply from chunkserver... if first/last block... then do extra overhead
+	}
+        if failure return -errno*/
 	return 0;
 /*  printf("Inside read. Path is: %s buf is %s",path,buf);
-        memset(tcp_buf,0,MAXLEN);
         sprintf(tcp_buf,"READ\n%s",path);
-
-	(void)fi;
-	char cacheFile[100];
-	char *tempBuf;
-	FILE *fd;
-	int cacheflag=0,exitflag=0;
-	int ret=0,tempsize,res;
-	int recvflag,retval=0;
-	strcpy(cacheFile,".");
-	strcat(cacheFile,path);
-	strcat(cacheFile,".cache");
-	fd=fopen(cacheFile,"ab+");
-       
         send(sock,tcp_buf,strlen(tcp_buf),0);
-        memset(tcp_buf,0,MAXLEN);
         recv(sock,tcp_buf,MAXLEN,0);
 	
-        memset(tcp_buf,0,MAXLEN);
+	NOTE: we had to send some arg separately in a new msg.. not sure why was that...
 	sprintf(tcp_buf,"%d",fi->flags);
         send(sock,tcp_buf,strlen(tcp_buf),0);
-	memset(tcp_buf,0,MAXLEN);
 	recv(sock,tcp_buf,MAXLEN,0);
 	
+	NOTE:if file was opened correctly at master
 	if(strcmp(tcp_buf,"success")==0)
 	  {
 	    int nsize,noff;
+	    NOTE: some math to find block numbers
 	    noff=(int)offset/BLOCKSIZE;
 	    nsize=(int)size/BLOCKSIZE+1;
 	    tempBuf=(char *)malloc(sizeof(char)*(nsize*BLOCKSIZE));
@@ -123,68 +112,9 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 	    int i;
 	    for(i=1;i<nsize;i++)
 	      {
-*/	/*************************cached data*******************************/
-/*		if(searchFile(noff+1,fd)==1)
-		  {
-		    printf("\n\nfound!!!!!\n\n");
-		    
-		    cacheflag=1;
-		    memset(tcp_buf,0,MAXLEN);
-		    
-		    FILE *fp;
-
-  
-		    blocks temp;  
-		    fseek(fd,0,SEEK_SET);
-		    while(fread(&temp,sizeof(blocks),1,fd))
-		      {
-		      
-		      if(temp.blockNumber==noff+1)
-			{
-			tempsize=strlen(temp.blockData);
- printf("%s\n\n<3<3<3<3<3%d:: %d",temp.blockData,(int)size,tempsize);fflush(stdout);
-			strcat(tempBuf,temp.blockData);
-			ret=ret+tempsize;
-			retval=retval+tempsize;
-			printf("This happens");fflush(stdout);
-
-			break;
-		      }
-		    }
-		    if(tempsize<BLOCKSIZE)
-		      {
-			send(sock,"cache",strlen("cache"),0);
-			printf("next\ni is %d and nsize is %d\n",i,nsize);
-			exitflag=1;
-			break;
-		      }
-		    if(i!=nsize)
-		      {
-			send(sock,"ok",strlen("ok"),0);
-			printf("ok\ni is %d and nsize is%d\n",i,nsize);
-		      }
-		    else
-		      {
-			send(sock,"done",strlen("done"),0);
-			printf("next\ni is %d and nsize is %d\n",i,nsize);
-			exitflag=1;
-			break;
-		      }
-
-		    fflush(stdout);
-
-		  }
-*/
-		/*********************************if uncached***************************************************/
-/*		else
-		  {
-		    
-		    memset(tcp_buf,0,MAXLEN);
-
 		      sprintf(tcp_buf,"%d",(noff*BLOCKSIZE));
 		    send(sock,tcp_buf,strlen(tcp_buf),0);
 		    
-		    memset(tcp_buf,0,MAXLEN);
 		    recvflag=recv(sock,tcp_buf,BLOCKSIZE,0);
 		    if(recvflag<0)
 		      {
@@ -192,17 +122,16 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 			exit(0);
 		      }
 		    
-		
 		    blocks temp;
-
 		    temp.blockNumber=noff;
-
 		    strcpy(temp.blockData,tcp_buf);
 
 		    writeToFile(fd,&temp);
+		    NOTE: some awkward copy-paste from temp buffer to actual buffer
 		    retval=retval+recvflag;
 			strcat(tempBuf,tcp_buf);
 
+		    NOTE: special handling if file is smaller thn no of bytes to be read
 		    if(strcmp(temp.blockData,"file_is_finished")==0 || recvflag<BLOCKSIZE){
 		      send(sock,"next",strlen("next"),0);
 		      printf("next\ni is %d and nsize is %d\n",i,nsize);		  
@@ -210,76 +139,33 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 			printf("Break from here");fflush(stdout);
 		      break;
 		    }
-
-		    memset(tcp_buf,0,MAXLEN);
-		    if(i!=nsize)
-		      {
-			send(sock,"ok",strlen("ok"),0);
-			printf("ok\ni is %d and nsize is%d\n",i,nsize);
-		      }
-		    else
-		      {
-			send(sock,"next",strlen("next"),0);
-			printf("next\ni is %d and nsize is %d\n",i,nsize);
-		      }
-		    fflush(stdout);
-
-		  }
-		printf("hi pathav ki");fflush(stdout);
-		recv(sock,tcp_buf,MAXLEN,0);
 		noff++;
 	      }
-	}
-	else{
-
-	    printf("sending errno");fflush(stdout);
-	    send(sock,tcp_buf,strlen(tcp_buf),0);
-	    memset(tcp_buf,0,MAXLEN);
-	    res=recv(sock,tcp_buf,MAXLEN,0);
-	    if(res<0){
-	      printf("\nError receiving flags");
-	      exit(1);
-	    }
-	    tcp_buf[res]='\0';
-	    ret=atoi(tcp_buf);
-
-	    return ret;
-
-
-	}
-
-	
-	if(exitflag==1)
-	  recv(sock,tcp_buf,MAXLEN,0);
-
-	fclose(fd);
 	printf("End of read\n");
-	printf("print");fflush(stdout);
-	memcpy(buf,tempBuf+((int)offset%BLOCKSIZE),(int)size);
-	buf[(int)size]='\0';
-	printf("\n\nbuf,%s",buf);fflush(stdout);
-	free(tempBuf);
-	memset(tcp_buf,0,MAXLEN);
-	printf("return %d:: %d",strlen(buf),(int)size);
-        return (int)size;
-
 */
 }
 
 static int gfs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi)
 {
         int ret;
-        //strcpy(filepath,rootpath);
-        //strcat(filepath,filename);
-        //send a message to master
-        //reply from master
-        //send a write (append) request to chunkserver
-        //reply from chunkserver
-        //if failure return -errno
+        /*strcpy(filepath,rootpath);
+        strcat(filepath,filename);
+	find the block number where to write.
+        send a message to master with filename and block number
+        reply from master.. failure if the write request is not an append to the last block...
+	if successful server returns 2 chunckservers to write to
+        send a write (append) request to each chunkserver
+        if successful reply from both chunkservers write successful.
+	There are multiple other options with write... to make sure of atomicity...
+	1. Either server returns only 1 primary chunk server... and somehow notifies the primary tht xyz is secondary.. 
+or primary after receiving write request checks with master regarding who is secondary... 
+	Then primary forwards the request to secondary and on success replies to client tht write is successful.. ensures ATOMIC write
+	2. Else.. client gets both chunk servers from master... while sending write request to primary.. the client also sends the details pof secondary.. 
+	Then primary forwards the request to secondary and on success replies to client tht write is successful.. ensures ATOMIC write
+        if failure return -errno*/
         return 0;
 
 /*	printf("Inside write. Path is: %s buf is %s",path,buf);
-        memset(tcp_buf,0,MAXLEN);
         sprintf(tcp_buf,"WRITE\n%s",path);
 
 	char wrtFile[100];
@@ -287,65 +173,40 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	tempBuf=(char *)malloc(sizeof(char)*(int)size);
 	FILE *fd;
 	int recvflag;
-	strcpy(wrtFile,".");
-	strcat(wrtFile,path);
-	strcat(wrtFile,".wrt");
-	fd=fopen(wrtFile,"ab+");
-	//	printf("cacheFile %s",cacheFile);fflush(stdout);
-//tcp code goes here
        
         send(sock,tcp_buf,strlen(tcp_buf),0);
-        memset(tcp_buf,0,MAXLEN);
         recv(sock,tcp_buf,MAXLEN,0);
-	printf("recvd\n%s\n",tcp_buf);
 	
         memset(tcp_buf,0,MAXLEN);
 	sprintf(tcp_buf,"%d",fi->flags);
+	NOTE: we had to send some arg separately in a new msg.. not sure why was that...
         send(sock,tcp_buf,strlen(tcp_buf),0);
 	memset(tcp_buf,0,MAXLEN);
 	recv(sock,tcp_buf,MAXLEN,0);
 	printf("recvd (this should be success)\n%s\n",tcp_buf);
 	
+	NOTE: File was open successfully
 	if(strcmp(tcp_buf,"success")==0)
 	  {
-
-	    memset(tcp_buf,0,MAXLEN);
 	    sprintf(tcp_buf,"%d",(int)offset);
 	    send(sock,tcp_buf,strlen(tcp_buf),0);
 	    strcpy(tempBuf,"");
 	    int nsize,noff;
+
+	    NOTE: calculation of blocks
 	    noff=(int)offset/BLOCKSIZE;
 	    nsize=(int)size/BLOCKSIZE;
+
 	    recv(sock,tcp_buf,MAXLEN,0);
 		printf("recvd\n%s\n",tcp_buf);
-	    memset(tcp_buf,0,MAXLEN);
 	    sprintf(tcp_buf,"%d",(int)size);
 	    send(sock,tcp_buf,MAXLEN,0);
 	    recv(sock,tcp_buf,MAXLEN,0);
 	printf("recvd\n%s\n",tcp_buf);
-	    memset(tcp_buf,0,MAXLEN);
-	    // sprintf(tcp_buf,"%d",(int)size);
 	    send(sock,buf,strlen(buf),0);
 	    recv(sock,tcp_buf,MAXLEN,0);
 	printf("recvd\n%s\n",tcp_buf);
 	    memset(tcp_buf,0,MAXLEN);
-	  }
-	else
-	  {
-	    int ret,res;
-	  printf("\n%s\n",tcp_buf);
-	    send(sock,tcp_buf,strlen(tcp_buf),0);
-	    memset(tcp_buf,0,MAXLEN);
-	    res=recv(sock,tcp_buf,MAXLEN,0);
-	    if(res<0){
-	      printf("\nError receiving flags");
-	      exit(1);
-	    }
-	    tcp_buf[res]='\0';
-	    ret=atoi(tcp_buf);
-	    // send(sock,"next",strlen("next"),0);
-	    return ret;
-
 	  }
 	     
 	fclose(fd);
