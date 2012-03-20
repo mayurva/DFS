@@ -1,51 +1,39 @@
-Flows:
-Namespace
-Create File
-Open File
-Read file
-Append File
+/* README */ 
 
-Delete File
-make dir
-readdir
-delete dir
+SOURCE CODE DESCRIPTION
+- gfs.h
+Common header file for generic message format, message types and operation specific message formats.
 
-1. getattr
+- master.h  master.c
+master module code and data structures - master initialization has been implemented
 
-2. mknod	
+- tcp_utils.c
+tcp bases message transfer API using sockets - implemented
 
-3. mkdir	
+- chunkserver.h chunkserver.c
+chunkserver code and data structures - yet to be implemented
 
-4. open	
+- client.h client.c
+fuse based client code - dummy functions
 
-5. read		
 
-6. write
+REQUIREMENTS
+You will fuse installed to compile and run the code
 
-8. readdir (getdir)	 
 
-9. access	
+COMPILATION AND BUILDING
+we have provided a Makefile
+run "make" to build
+This will create 3 executables - master, client and chunkserver
 
-12. create
 
-13. utime	
-
-14. rename	
-
-15. rmdir	
+RUN
+To run master - ./master
+To run client - ./client
+To run chunkserver - ./chunkserver
 
 
 
-he sagle skip karu shakto
-10. chmod	
 
-11. chown	
 
-16. symlink		
-
-17. link	
-
-18. unlink
-
-19. readlink	
 
