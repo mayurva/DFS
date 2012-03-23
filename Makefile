@@ -15,7 +15,7 @@ client:
 	$(CC) -g $(FLAGS) -o client client.c tcp_utils.c
 
 master:
-	$(CC) -o master master.o tcp_utils.o 
+	$(CC) -o master master.o tcp_utils.o -lpthread
 	
 chunkserver:
 	$(CC) -o chunkserver chunkserver.o tcp_utils.o
