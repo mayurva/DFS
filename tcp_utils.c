@@ -53,7 +53,6 @@ int acceptConnection(int soc)
 	int slen = sizeof(sock_client);
 	
 	if ((conn_port = accept(soc, (struct sockaddr *) &sock_client, &slen)) == -1) {
-		printf("accept call failed! \n");
 		return -1;
 	}
 	
@@ -83,7 +82,6 @@ int createConnection(host h,int conn_socket)
 
 	ret = connect(conn_socket, (struct sockaddr *) &sock_client, slen);
 	if (ret == -1) {
-		printf("Connect failed! Check the IP and port number of the Server! \n");
 		return -1;
 	}
 	
@@ -97,8 +95,7 @@ int createSocket()
 {
 	int soc;
 	if ((soc= socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		printf("error in socket creation\n");
-		exit(-1);
+		return -1;
 	}
 	#ifdef DEBUG
 		printf("Socket created\n");

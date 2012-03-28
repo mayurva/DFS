@@ -17,6 +17,8 @@ chunkserver chunk_servers[NUM_CHUNKSERVERS];
 
 int master_init()
 {
+	char *hostname;
+	int len;
 	/* Create hashtable */
 	file_list = (struct hsearch_data*)calloc(1, sizeof(struct hsearch_data)); 
 	if (file_list == NULL) {
@@ -48,7 +50,15 @@ int master_init()
 	}
 
 	/* Create master listen socket */
-	populateIp(&master,"localhost");
+	if(gethostname(&hostname,len)!=-1){
+		printf("length is %d\n",len);
+//		printf("hostname %s\n",hostname);
+		populateIp(&master,hostname);
+	}
+	else{
+		populateIp(&master,"192.168.2.4");
+	}
+
 	#ifdef DEBUG
 		printf("ip address is %s\n",master.ip_addr);
 	#endif
@@ -62,7 +72,7 @@ int master_init()
 }
 int find_chunkserver(host h)
 {
-	return ;
+	return 0;
 }
 
 int main()
