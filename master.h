@@ -10,20 +10,22 @@
 
 #define NUM_CHUNKSERVERS 4
 typedef struct chunkserver_{
-	host h;
-	int is_up;
-	pthread_t thread;
-	int conn_socket;
+	char		ip_addr[20];
+	int		heartbeat_port;
+	int		client_port;
+	int		is_up;
+	pthread_t	thread;
+	int		conn_socket;
 }chunkserver;
 
 typedef struct file_info_ {
-	struct hsearch_data	*chunk_list;
-	struct stat		filestat;
+struct hsearch_data *chunk_list;
+struct stat filestat;
 }file_info;
 
 typedef struct chunk_info_ {
-	char	chunk_handle[64];
-	int	chunksever_id[2];
+char chunk_handle[64];
+int chunksever_id[2];
 }chunk_info;
 
 void* connectChunkServer(void*);

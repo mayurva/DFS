@@ -5,6 +5,8 @@
 #include<fuse.h>
 #include<stdio.h>
 
+pthread_mutex_t seq_mutex;
+
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
@@ -288,6 +290,8 @@ int main(int argc, char *argv[])
                 argv[i] = argv[i+1];
         argc--;
         umask(0);
+	pthread_mutex_init(&seq_mutex, NULL);
+
         return fuse_main(argc, argv, &gfs_oper, NULL);
 }
 

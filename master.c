@@ -3,17 +3,21 @@
 #include<stdlib.h>
 #include<sys/types.h>
 #include<sys/socket.h>
+#include<netinet/in.h>
 #include<pthread.h>
 #include"gfs.h"
 #define _GNU_SOURCE
 #define __USE_GNU
 #include"master.h"
+#include <string.h>
+#include <arpa/inet.h>
 
 struct hsearch_data *file_list;
 host master;
 int client_listen_socket;
 int chunkserver_listen_socket;
 chunkserver chunk_servers[NUM_CHUNKSERVERS];
+pthread_mutex_t seq_mutex;
 
 int master_init()
 {
@@ -41,10 +45,10 @@ int master_init()
         }
 	int i = 0;
 	while (!feof(config_file)) {
-		fscanf(config_file, "%s %d\n", chunk_servers[i].h.ip_addr, &chunk_servers[i].h.port);
+		fscanf(config_file, "%s %d %d\n", chunk_servers[i].ip_addr, &chunk_servers[i].heartbeat_port, &chunk_servers[i].client_port);
 		chunk_servers[i].is_up = 0;
 		#ifdef DEBUG
-			printf("chunk server %d: ip address is: %s and port is: %d\n",i,chunk_servers[i].h.ip_addr,chunk_servers[i].h.port);
+			printf("chunk server %d: ip address is: %s and heartbeat port is: %d and client port is %d\n",i, chunk_servers[i].ip_addr, chunk_servers[i].heartbeat_port, chunk_servers[i].client_port);
 		#endif
 		i++;
 	}
@@ -62,6 +66,7 @@ int master_init()
 	#ifdef DEBUG
 		printf("ip address is %s\n",master.ip_addr);
 	#endif
+	pthread_mutex_init(&seq_mutex, NULL);
 	client_listen_socket = createSocket();
 	bindSocket(client_listen_socket, CLIENT_LISTEN_PORT, master.ip_addr);	
 	listenSocket(client_listen_socket);
@@ -72,7 +77,13 @@ int master_init()
 }
 int find_chunkserver(host h)
 {
-	return 0;
+	int i;
+	for (i = 0; i < NUM_CHUNKSERVERS; i++) {
+		if ((strcmp(h.ip_addr, chunk_servers[i].ip_addr) == 0) && (h.port == chunk_servers[i].heartbeat_port)) {
+			return i;
+		}
+	}
+	return -1;
 }
 
 int main()
@@ -114,16 +125,29 @@ void* connectChunkServer(void* ptr)
 	#endif
 	for(i=0;i<NUM_CHUNKSERVERS;i++){
 		soc = acceptConnection(chunkserver_listen_socket);
+
 		//send a reply ack msg
-		//chunkserver sends back his ip and port. save it in h
+		//chunkserver sends back his ip and port. save it in h change -- we can use getsockname to do the same 
+		struct sockaddr_in sockaddr;
+		socklen_t addrlen = sizeof(struct sockaddr_in);
+		if (getsockname(soc, (struct sockaddr*) &sockaddr, &addrlen) == 0) {
+			strcpy(h.ip_addr, inet_ntoa(sockaddr.sin_addr));
+			h.port = (unsigned)ntohs(sockaddr.sin_port);
+			printf("chunk server ip = %s port = %d", h.ip_addr, h.port);
+		} else {
+			printf("Unable to obtain chunkserver ip and port\n");
+			exit(0);
+		}
+ 
 		//find if this chunkserver present in configured list. return the index if so.
-		if((j=find_chunkserver(h))!=-1){	
+		// change -- if getsockname works we may not need the config file at all
+		if((j = find_chunkserver(h)) != -1  ) {	
 			chunk_servers[j].conn_socket = soc;
 			chunk_servers[j].is_up = 1;
 			#ifdef DEBUG
 				printf("Chunkserver %d joined\n",j);
 			#endif
-			if((pthread_create(&chunk_servers[j].thread,NULL,listenChunkServer,(void*)&j))!=0){
+			if((pthread_create(&chunk_servers[j].thread,NULL,listenChunkServer,(void*)j))!=0){
         	        	printf("%s: Failed to create corresponding thread for chunk server %d\n",__func__,j);
         		}
 		}
@@ -163,13 +187,22 @@ void* listenClient(void* ptr){
 
 void* listenChunkServer(void* ptr)
 {
-	int index = *(int*)ptr;
-	struct msghdr msg;
+	int index = (int)ptr, retval;
+
+	struct msghdr *msg;
+	prepare_msg(HEARTBEAT, msg, &index, sizeof(index));
+	
 	#ifdef DEBUG
 		printf("this thread listens heartbeat messages from chunkserver %d\n",index);
 	#endif
-	while(1){
-		recvmsg(chunk_servers[index].conn_socket, &msg, 0);
+	while(1) {
+		retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
+		if (retval == -1) {
+			chunk_servers[index].is_up = 0;
+			// TODO : handle failure of chunkserver by re-replication
+			break;
+		}
+		retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
 		#ifdef DEBUG
 			printf("Received heartbeat message from chunkserver %d\n",index);
 		#endif

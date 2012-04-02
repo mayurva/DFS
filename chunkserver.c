@@ -12,6 +12,7 @@ char *chunk_path;
 host chunkserver;
 host master;
 int client_listen_socket,master_socket;
+pthread_mutex_t	seq_mutex;
 
 int chunkserver_init(int argc, char *argv[])
 {
@@ -22,7 +23,7 @@ int chunkserver_init(int argc, char *argv[])
 	}	
 	strcpy(chunk_path,argv[1]);	//THis is the path where chunks are stored
 	#ifdef DEBUG
-		printf("path is %s\n");
+		printf("path is %s\n", chunk_path);
 	#endif
 
 	if((populateIp(&master,argv[2]))==-1){	//Ip address of master.. its listen port is known
@@ -58,6 +59,8 @@ int chunkserver_init(int argc, char *argv[])
 		printf("%s: Could not connect to the master\n",__func__);
 		return -1;	
 	}
+
+	pthread_mutex_init(&seq_mutex, NULL);
 	//recv an ack
 	//send IP and Port details
 		

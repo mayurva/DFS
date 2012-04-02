@@ -6,9 +6,12 @@
 #define CHUNK_SIZE 	(2 * 1024 * 1024)
 #define MAX_CLIENTS 10
 
+#include<sys/types.h>
+#include<sys/socket.h>
+
 typedef struct host_{
-	char	ip_addr[20];
-	int	port;
+	char ip_addr[20];
+	int port;
 }host;
 
 enum msg_type {
@@ -98,5 +101,3 @@ typedef struct write_data_resp_ {
 }write_data_resp;
 
 #endif
-
-

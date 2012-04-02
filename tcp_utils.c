@@ -8,6 +8,12 @@
 #include<net/if.h>
 #include<sys/time.h>
 #include"gfs.h"
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<pthread.h>
+
+unsigned long long seq_num = 0;
+extern pthread_mutex_t seq_mutex;
 
 int getRandom(int lower,int upper)
 {
@@ -124,3 +130,35 @@ int bindSocket(int soc, int listen_port, char ip_addr[])
 
 	return listen_port;
 }
+
+
+void prepare_msg(int msg_type, struct msghdr *msg, void * data_ptr, int data_len)
+{
+        dfs_msg *dfsmsg = (dfs_msg*) malloc(sizeof(dfs_msg));
+        msg = (struct msghdr*) malloc(sizeof(struct msghdr));
+
+	pthread_mutex_lock(&seq_mutex);
+        dfsmsg->seq = seq_num++;
+	pthread_mutex_unlock(&seq_mutex);
+
+        dfsmsg->msg_type = msg_type;
+        dfsmsg->len =  data_len;
+        dfsmsg->data = data_ptr;
+
+        msg->msg_iov = (struct iovec *) malloc(sizeof(struct iovec) * 2);
+        msg->msg_iov[0].iov_base = dfsmsg;
+        msg->msg_iov[0].iov_len = sizeof(dfs_msg);
+        msg->msg_iov[1].iov_base = data_ptr;
+        msg->msg_iov[1].iov_len = data_len;
+        msg->msg_iovlen = 2;
+
+}
+
+void free_msg(struct msghdr *msg)
+{
+        free(((dfs_msg*)msg->msg_iov[0].iov_base)->data);
+        free(msg->msg_iov[0].iov_base);
+        free(msg->msg_iov);
+        free(msg);
+}
+
