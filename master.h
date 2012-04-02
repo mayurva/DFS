@@ -28,8 +28,8 @@ char chunk_handle[64];
 int chunksever_id[2];
 }chunk_info;
 
-void* connectChunkServer(void*);
-void* listenClient(void*);
-void* listenChunkServer(void*);
+void* connect_chunkserver_thread(void*);
+void* client_request_listener(void*);
+void* heartbeat_thread(void*);
 
 #endif

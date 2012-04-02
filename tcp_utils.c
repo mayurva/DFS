@@ -162,3 +162,7 @@ void free_msg(struct msghdr *msg)
         free(msg);
 }
 
+void print_msg(struct msghdr *msg)
+{
+	printf("\n Message is :");
+}
