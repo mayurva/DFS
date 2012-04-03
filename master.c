@@ -177,6 +177,42 @@ void* connect_chunkserver_thread(void* ptr)
 	#endif
 }
 
+void* handle_client_request(void *arg)
+{
+	struct msghdr msg;
+	int soc = (int)arg;
+
+	recvmsg(soc, &msg, 0);
+	
+#ifdef DEBUG
+	printf("received message from client\n");
+#endif
+	//extract the message type
+	print_msg(&msg);
+	
+	switch (msg.msg_type) {
+
+		case CREATE_REQ:
+			break;
+
+		case OPEN_REQ:
+			break;
+
+		case GETATTR_REQ:
+			break;
+
+		case READDIR_REQ:
+			break;
+
+		case READ_REQ:
+			break;
+
+		case WRITE_REQ:
+			break;
+
+	}
+}
+
 /* Thread to handle requests from clients */
 void* client_request_listener(void* ptr){
 	int soc;
@@ -191,13 +227,9 @@ void* client_request_listener(void* ptr){
 		#ifdef DEBUG
 			printf("connected to client\n");
 		#endif
-		recvmsg(soc, &msg, 0);
-		#ifdef DEBUG
-			printf("received message from client\n");
-		#endif
-		//extract the message type
-		print_msg(&msg);
-		//and reply to client appropriately
+		if((pthread_create(&threads[thr_id++], NULL, handle_client_request, (void*)soc)) != 0) {
+			printf("%s: Failed to create thread to handle client requests %d\n", __func__, soc);
+		}
 	}
 }
 

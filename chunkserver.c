@@ -108,6 +108,35 @@ int main(int argc, char * argv[])
         return 0;
 }
 
+void* handle_client_request(void *arg)
+{	
+	struct msghdr msg;
+        int soc = (int)arg;
+
+        recvmsg(soc, &msg, 0);
+
+
+#ifdef DEBUG
+        printf("received message from client\n");
+#endif
+        //extract the message type
+        print_msg(&msg);
+
+        switch (msg.msg_type) {
+
+                case HEARTBEAT:
+                        break;
+
+
+                case READ_DATA_REQ:
+                        break;
+
+                case WRITE_DATA_REQ:
+                        break;
+        }
+}
+	
+
 void* listenClient(void* ptr)
 {
 	int soc;
