@@ -115,18 +115,18 @@ void* handle_client_request(void *arg)
 
         recvmsg(soc, &msg, 0);
 
-
+        dfs_msg *dfsmsg;
+        dfsmsg = (dfs_msg*)msg.msg_iov[0].iov_base;
 #ifdef DEBUG
         printf("received message from client\n");
 #endif
         //extract the message type
         print_msg(&msg);
 
-        switch (msg.msg_type) {
+        switch (dfsmsg->msg_type) {
 
                 case HEARTBEAT:
                         break;
-
 
                 case READ_DATA_REQ:
                         break;

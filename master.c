@@ -20,6 +20,8 @@ int heartbeat_socket;
 
 chunkserver chunk_servers[NUM_CHUNKSERVERS];
 pthread_mutex_t seq_mutex;
+pthread_t	threads[MAX_THR];
+int thr_id = 0;
 
 int master_init()
 {
@@ -183,14 +185,16 @@ void* handle_client_request(void *arg)
 	int soc = (int)arg;
 
 	recvmsg(soc, &msg, 0);
-	
+
+	dfs_msg *dfsmsg;
+	dfsmsg = (dfs_msg*)msg.msg_iov[0].iov_base;	
 #ifdef DEBUG
 	printf("received message from client\n");
 #endif
 	//extract the message type
 	print_msg(&msg);
 	
-	switch (msg.msg_type) {
+	switch (dfsmsg->msg_type) {
 
 		case CREATE_REQ:
 			break;
