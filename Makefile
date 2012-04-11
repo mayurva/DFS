@@ -15,10 +15,10 @@ client:
 	$(CC) -g $(FLAGS) -o client client.c tcp_utils.c
 
 master:
-	$(CC) -o master master.o tcp_utils.o -lpthread
+	$(CC) -o master master.o tcp_utils.o -lpthread -g
 	
 chunkserver:
-	$(CC) -o chunkserver chunkserver.o tcp_utils.o -lpthread
+	$(CC) -o chunkserver chunkserver.o tcp_utils.o -lpthread -g
 
 .PHONY: clean 
 clean:

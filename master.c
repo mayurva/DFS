@@ -11,6 +11,10 @@
 #include"master.h"
 #include <string.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#define DEBUG
+
+#define  MAX_DATA_SZ 1000
 
 struct hsearch_data *file_list;
 host master;
@@ -23,7 +27,7 @@ pthread_mutex_t seq_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
 
-int master_init()
+int master_init(char *master_ip)
 {
 	char *hostname;
 	int len;
@@ -58,17 +62,9 @@ int master_init()
 		i++;
 	}
 
-	/* Create master listen socket */
-	if(gethostname(&hostname,len)!=-1) {
-		#ifdef DEBUG
-		printf("length is %d\n",len);
-		printf("hostname %s\n",hostname);
-		#endif
-		populateIp(&master,hostname);
-	} else {
-		populateIp(&master,"192.168.2.4");
-	}
 
+	/* Set master ip address */
+	strcpy(master.ip_addr, master_ip);	
 	#ifdef DEBUG
 		printf("ip address is %s\n",master.ip_addr);
 	#endif
@@ -100,13 +96,18 @@ int find_chunkserver(host h)
 	return -1;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	int retval;
 	pthread_t client_listen_thread, chunkserver_listen_thread;
 
+	if (argc != 2) {
+		printf("run as : ./master <master-ip-address>\n");
+		return 0;
+	}
+
 	/* Initialize master */
-	retval = master_init();
+	retval = master_init(argv[1]);
 	if (retval == -1) {
 		printf("%s : Failed to initialize master\n", __func__);
 		return -1;
@@ -135,6 +136,7 @@ void* connect_chunkserver_thread(void* ptr)
 	int i,j;
 	host h;
 	int soc;
+	char buf[200];
 	#ifdef DEBUG
 		printf("Waiting for chunk servers to join\n");
 	#endif
@@ -145,13 +147,15 @@ void* connect_chunkserver_thread(void* ptr)
 		/* Get the connection details of the chunkserver */
 		struct sockaddr_in sockaddr;
 		socklen_t addrlen = sizeof(struct sockaddr_in);
-		if (getsockname(soc, (struct sockaddr*) &sockaddr, &addrlen) == 0) {
+		if (getpeername(soc, (struct sockaddr*) &sockaddr, &addrlen) == 0) {
 			strcpy(h.ip_addr, inet_ntoa(sockaddr.sin_addr));
 			h.port = (unsigned)ntohs(sockaddr.sin_port);
-			printf("chunk server ip = %s port = %d", h.ip_addr, h.port);
+			sprintf(buf, "chunk server ip = %s port = %d\n", h.ip_addr, h.port);
+			write(1, buf, strlen(buf));
 		} else {
-			printf("Unable to obtain chunkserver ip and port\n");
-			exit(0);
+			sprintf(buf, "Unable to obtain chunkserver ip and port\n");
+			write(1, buf, strlen(buf));
+			continue;
 		}
  
 		/* find if this chunkserver present in configured list. return the index if so */
@@ -159,7 +163,7 @@ void* connect_chunkserver_thread(void* ptr)
 			chunk_servers[j].conn_socket = soc;
 			chunk_servers[j].is_up = 1;
 			#ifdef DEBUG
-				printf("Chunkserver %d joined\n",j);
+				printf("Chunkserver %d joined %d\n",j, soc);
 			#endif
 			/* Start a heartbeat thread for this chunkserver */
 			if((pthread_create(&chunk_servers[j].thread, NULL, heartbeat_thread, (void*)j)) != 0) {
@@ -181,13 +185,15 @@ void* connect_chunkserver_thread(void* ptr)
 
 void* handle_client_request(void *arg)
 {
-	struct msghdr msg;
+	struct msghdr *msg;
 	int soc = (int)arg;
+	char * data = (char *) malloc(MAX_DATA_SZ);
+	prepare_msg(0, &msg, data, MAX_DATA_SZ);
 
-	recvmsg(soc, &msg, 0);
+	recvmsg(soc, msg, 0);
 
 	dfs_msg *dfsmsg;
-	dfsmsg = (dfs_msg*)msg.msg_iov[0].iov_base;	
+	dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;	
 #ifdef DEBUG
 	printf("received message from client\n");
 #endif
@@ -243,33 +249,49 @@ void* heartbeat_thread(void* ptr)
 	int index = (int)ptr, retval;
 
 	struct msghdr *msg;
-	prepare_msg(HEARTBEAT, msg, &index, sizeof(index));
-	
+	prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+	char buf[200];
+	int id = 0;	
 	#ifdef DEBUG
-		printf("this thread listens heartbeat messages from chunkserver %d\n",index);
+		printf("this thread sends heartbeat messages to chunkserver %d\n",index);
 	#endif
 
 	while(1) {
 
+		#ifdef DEBUG
+			sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
+			write(1, buf, strlen(buf));
+		#endif
 		/* Send heartbeat request to chunkserver */
 		retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
+		//retval = send(chunk_servers[index].conn_socket, "Hi", 3, 0);
 		if (retval == -1) {
 			chunk_servers[index].is_up = 0;
 			// TODO : handle failure of chunkserver by re-replication
+			sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
+			write(1, buf, strlen(buf));
 			break;
-		}
+		} else {
+		#ifdef DEBUG
+			sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
+			write(1, buf, strlen(buf));
+		#endif
+		}	
 
 		/* Wait for heartbeat reply from chunkserver */
 		retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
 		if (retval == -1) {
 			chunk_servers[index].is_up = 0;
 			// TODO : handle failure of chunkserver by re-replication
+			sprintf(buf, "Chunkserver-%d is down\n",index);
+			write(1, buf, strlen(buf));
 			break;
-		}
-
+		} else {
 		#ifdef DEBUG
-			printf("Received heartbeat reply from chunkserver %d\n",index);
+			sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
+			write(1, buf, strlen(buf));
 		#endif
+		}
 
 		/* Heartbeat is exchanged every 5 sec */
 		sleep(5);
