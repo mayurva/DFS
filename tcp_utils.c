@@ -29,7 +29,7 @@ int populateIp(host *h,char *hostname)
 {
 	struct hostent *lh = gethostbyname(hostname);
 	if(lh){
-		strcpy(h->ip_addr,inet_ntoa( *( struct in_addr*)( lh -> h_addr_list[0])));
+		strcpy(h->ip_addr,inet_ntoa( *( struct in_addr*)( lh -> h_addr_list[1])));
 		return 0;
 	}
 	return -1;
@@ -132,10 +132,13 @@ int bindSocket(int soc, int listen_port, char ip_addr[])
 }
 
 
-void prepare_msg(int msg_type, struct msghdr *msg, void * data_ptr, int data_len)
+void prepare_msg(int msg_type, struct msghdr **msg, void * data_ptr, int data_len)
 {
         dfs_msg *dfsmsg = (dfs_msg*) malloc(sizeof(dfs_msg));
-        msg = (struct msghdr*) malloc(sizeof(struct msghdr));
+        *msg = (struct msghdr*) malloc(sizeof(struct msghdr));
+	struct iovec *iov = (struct iovec*) malloc(sizeof(struct iovec) * 2);
+	memset(*msg, 0, sizeof(struct msghdr));
+	memset(iov, 0, sizeof(iov));
 
 	pthread_mutex_lock(&seq_mutex);
         dfsmsg->seq = seq_num++;
@@ -145,12 +148,12 @@ void prepare_msg(int msg_type, struct msghdr *msg, void * data_ptr, int data_len
         dfsmsg->len =  data_len;
         dfsmsg->data = data_ptr;
 
-        msg->msg_iov = (struct iovec *) malloc(sizeof(struct iovec) * 2);
-        msg->msg_iov[0].iov_base = dfsmsg;
-        msg->msg_iov[0].iov_len = sizeof(dfs_msg);
-        msg->msg_iov[1].iov_base = data_ptr;
-        msg->msg_iov[1].iov_len = data_len;
-        msg->msg_iovlen = 2;
+        (*msg)->msg_iov = iov;
+        iov[0].iov_base = dfsmsg;
+        iov[0].iov_len = sizeof(dfs_msg);
+        iov[1].iov_base = data_ptr;
+        iov[1].iov_len = data_len;
+        (*msg)->msg_iovlen = 2;
 
 }
 
