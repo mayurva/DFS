@@ -4,24 +4,44 @@
 #include"client.h"
 #include<fuse.h>
 #include<stdio.h>
-
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<stdlib.h>
+#include<string.h>
+struct msghdr *msg;
+host master;
+int soc;
 pthread_mutex_t seq_mutex;
 
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
-	/*strcpy(filepath,rootpath);
-	strcat(filepath,filename);
-	send a message to master
-	reply from master
-	if failure return -errno
-	copy the data into stbuf (if required)*/
+	prepare_msg(GETATTR_REQ, msg, path, strlen(path));
+	if(createConnection(master,soc) == -1){
+		printf("%s: can not connect to the master server\n",__func__);
+		return -1;
+	}
+
+	//send a message to master
+	if((sendmsg(soc,msg,0))==-1){
+		printf("%s: message sending failed\n",__func__);
+		return -1;
+	}
+	//reply from master
+	if((recvmsg(soc,msg,0))==-1){
+		printf("%s: message receipt failed\n",__func__);
+		return -1;
+	}
+	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+	//if failure return -errno
+	if(dfsmsg->status!=0){
+		return -*(int*)dfsmsg->data;
+	}
+	//copy the data into stbuf (if required)
+	stbuf = (struct stat*) dfsmsg->data;
 	return 0;
 /*	
 //client side code goes here
-
-		send(sock,tcp_buf,strlen(tcp_buf),0);
-		recv(sock,(char *)&temp_stbuf,sizeof(struct stat),0);
 
 	stbuf->st_dev = temp_stbuf.st_dev;
 	stbuf->st_ino = temp_stbuf.st_ino;
@@ -42,47 +62,89 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 
 static int gfs_mkdir(const char *path, mode_t mode)
 {
-        int ret;
-        /*strcpy(filepath,rootpath);
-        strcat(filepath,filename);
-        send a message to master
-        reply from master
-        if failure return -errno*/
+       int ret;
+
+	//TODO: create a data structure for mkdir req
+        prepare_msg(MAKE_DIR_REQ, msg, path, strlen(path));
+        if(createConnection(master,soc) == -1){
+                printf("%s: can not connect to the master server\n",__func__);
+                return -1;
+        }
+
+	//send a message to master
+        if((sendmsg(soc,msg,0))==-1){
+                printf("%s: message sending failed\n",__func__);
+                return -1;
+        }
+        //reply from master
+        if((recvmsg(soc,msg,0))==-1){
+                printf("%s: message receipt failed\n",__func__);
+                return -1;
+        }
+        dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+        //if failure return -errno
+        if(dfsmsg->status!=0){
+                return -*(int*)dfsmsg->data;
+        }
         return 0;
-/*
-
-	//tcp code goes here
-        send(sock,tcp_buf,strlen(tcp_buf),0);
-        recv(sock,tcp_buf,MAXLEN,0);
-
-        return res;*/
 }
 
 static int gfs_open(const char *path, struct fuse_file_info *fi)
 {
         int ret;
-        /*strcpy(filepath,rootpath);
-        strcat(filepath,filename);
-        send a message to master
-        reply from master
-        if failure return -errno*/
+	//TODO: create a data structure for open req
+	prepare_msg(OPEN_REQ, msg, path, strlen(path));
+        if(createConnection(master,soc) == -1){
+                printf("%s: can not connect to the master server\n",__func__);
+                return -1;
+        }
+	//send a message to master
+        if((sendmsg(soc,msg,0))==-1){
+                printf("%s: message sending failed\n",__func__);
+                return -1;
+        }
+        //reply from master
+        if((recvmsg(soc,msg,0))==-1){
+                printf("%s: message receipt failed\n",__func__);
+                return -1;
+        }
+        dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+        //if failure return -errno
+        if(dfsmsg->status!=0){
+                return -*(int*)dfsmsg->data;
+        }
         return 0;
-
-/*  int ret=0;
-
-        send(sock,tcp_buf,strlen(tcp_buf),0);
-        memset(tcp_buf,0,MAXLEN);
-        recv(sock,tcp_buf,MAXLEN,0);
-
-
-        return ret;*/
 }
 
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
 	int ret;
-	/*strcpy(filepath,rootpath);
-        strcat(filepath,filename);
+	int start_block = offset/CHUNK_SIZE;
+	int last_block = (offset+size)/CHUNK_SIZE;
+	int i;
+	prepare_msg(OPEN_REQ, msg, path, strlen(path));
+	if(createConnection(master,soc) == -1){
+		printf("%s: can not connect to the master server\n",__func__);
+		return -1;
+	}
+	
+	//read first block
+	for(i=start_block;i<last_block;i++){
+		if((sendmsg(soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+        	//reply from master
+        	if((recvmsg(soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		close(soc);
+				
+	}
+	//read last block
+	
+	/*
 	find the number of blocks and corresponding block numbers to be read.
 	for each block to be read.. {
 	        send a message to master with file name and block number
@@ -282,15 +344,29 @@ static struct fuse_operations gfs_oper = {
 	//.setxattr = (void*)dfs_setxattr,
 };
 
+int client_init(int argc,char* argv[])
+{	
+	pthread_mutex_init(&seq_mutex, NULL);
+	populateIp(&master,argv[1]);
+	if((soc = createSocket())==-1){
+		printf("%s: Error creating socket\n",__func__);
+		return -1;
+	}
+	master.port = MASTER_LISTEN;
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
-        int i;
-	/*initialize the client data structures here*/
+	int i;
+	if((client_init(argc,argv))==-1){
+		printf("Error initializing client..exiting..\n");
+		exit(-1);
+	}
         for(i=1;i<argc;i++)
                 argv[i] = argv[i+1];
         argc--;
         umask(0);
-	pthread_mutex_init(&seq_mutex, NULL);
 
         return fuse_main(argc, argv, &gfs_oper, NULL);
 }
