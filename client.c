@@ -10,28 +10,30 @@
 #include<string.h>
 struct msghdr *msg;
 host master;
-int soc;
+int master_soc;
 pthread_mutex_t seq_mutex;
 
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
-	prepare_msg(GETATTR_REQ, msg, path, strlen(path));
-	if(createConnection(master,soc) == -1){
+	prepare_msg(GETATTR_REQ, &msg, path, strlen(path));
+	if(createConnection(master,master_soc) == -1){
 		printf("%s: can not connect to the master server\n",__func__);
 		return -1;
 	}
+	print_msg(msg->msg_iov[0].iov_base);
 
 	//send a message to master
-	if((sendmsg(soc,msg,0))==-1){
+	if((sendmsg(master_soc,msg,0))==-1){
 		printf("%s: message sending failed\n",__func__);
 		return -1;
 	}
 	//reply from master
-	if((recvmsg(soc,msg,0))==-1){
+	if((recvmsg(master_soc,msg,0))==-1){
 		printf("%s: message receipt failed\n",__func__);
 		return -1;
 	}
+	close(master_soc);
 	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
 	//if failure return -errno
 	if(dfsmsg->status!=0){
@@ -41,7 +43,7 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	stbuf = (struct stat*) dfsmsg->data;
 	return 0;
 /*	
-//client side code goes here
+_//client side code goes here
 
 	stbuf->st_dev = temp_stbuf.st_dev;
 	stbuf->st_ino = temp_stbuf.st_ino;
@@ -56,31 +58,32 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	stbuf->st_atime = temp_stbuf.st_atime;
 	stbuf->st_mtime = temp_stbuf.st_mtime;
 	stbuf->st_ctime = temp_stbuf.st_ctime;
-
 */
 }
 
 static int gfs_mkdir(const char *path, mode_t mode)
 {
-       int ret;
-
-	//TODO: create a data structure for mkdir req
-        prepare_msg(MAKE_DIR_REQ, msg, path, strlen(path));
-        if(createConnection(master,soc) == -1){
-                printf("%s: can not connect to the master server\n",__func__);
-                return -1;
-        }
+       	int ret;
+	mkdir_req data_ptr;
+	create_mkdir_req(&data_ptr,path,mode);
+        prepare_msg(MAKE_DIR_REQ, &msg, &data_ptr, sizeof(mkdir_req)); 
+        if(createConnection(master,master_soc) == -1){
+		printf("%s: can not connect to the master server\n",__func__);
+		return -1;
+	}
+	print_msg(msg->msg_iov[0].iov_base);
 
 	//send a message to master
-        if((sendmsg(soc,msg,0))==-1){
+        if((sendmsg(master_soc,msg,0))==-1){
                 printf("%s: message sending failed\n",__func__);
                 return -1;
         }
         //reply from master
-        if((recvmsg(soc,msg,0))==-1){
+        if((recvmsg(master_soc,msg,0))==-1){
                 printf("%s: message receipt failed\n",__func__);
                 return -1;
         }
+	close(master_soc);
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
         //if failure return -errno
         if(dfsmsg->status!=0){
@@ -92,23 +95,27 @@ static int gfs_mkdir(const char *path, mode_t mode)
 static int gfs_open(const char *path, struct fuse_file_info *fi)
 {
         int ret;
-	//TODO: create a data structure for open req
-	prepare_msg(OPEN_REQ, msg, path, strlen(path));
-        if(createConnection(master,soc) == -1){
+	open_req data_ptr;
+	create_open_req(&data_ptr,path,fi->flags);
+	prepare_msg(OPEN_REQ, &msg, &data_ptr, sizeof(open_req));
+        if(createConnection(master,master_soc) == -1){
                 printf("%s: can not connect to the master server\n",__func__);
                 return -1;
         }
+	print_msg(msg->msg_iov[0].iov_base);
+	
 	//send a message to master
-        if((sendmsg(soc,msg,0))==-1){
+        if((sendmsg(master_soc,msg,0))==-1){
                 printf("%s: message sending failed\n",__func__);
                 return -1;
         }
         //reply from master
-        if((recvmsg(soc,msg,0))==-1){
+        if((recvmsg(master_soc,msg,0))==-1){
                 printf("%s: message receipt failed\n",__func__);
                 return -1;
         }
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+	close(master_soc);
         //if failure return -errno
         if(dfsmsg->status!=0){
                 return -*(int*)dfsmsg->data;
@@ -118,40 +125,64 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
+	int chunk_soc;
+	host chunk_server;
 	int ret;
+	int i;
+	int curr_offset;
+	read_req read_ptr;
+	read_data_req data_ptr;
+	char chunk_handle[64];
+
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size)/CHUNK_SIZE;
-	int i;
-	prepare_msg(OPEN_REQ, msg, path, strlen(path));
-	if(createConnection(master,soc) == -1){
+		
+	if(createConnection(master,master_soc) == -1){
 		printf("%s: can not connect to the master server\n",__func__);
 		return -1;
 	}
 	
-	//read first block
-	for(i=start_block;i<last_block;i++){
-		if((sendmsg(soc,msg,0))==-1){
+	for(i=start_block;i<=last_block;i++){
+		create_read_req(&read_ptr,path,i);
+		prepare_msg(READ_REQ, &msg, &read_ptr, sizeof(read_req));
+		print_msg(msg->msg_iov[0].iov_base);
+		if((sendmsg(master_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
 	                return -1;
         	}
         	//reply from master
-        	if((recvmsg(soc,msg,0))==-1){
+        	if((recvmsg(master_soc,msg,0))==-1){
                 	printf("%s: message receipt failed\n",__func__);
 	                return -1;
         	}
-		close(soc);
-				
+		//extract chunkserver details
+        	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+		strcpy(chunk_server.ip_addr,((read_resp*)dfsmsg -> data) ->ip_address);
+		chunk_server.port = ((read_resp*)dfsmsg->data) ->port;
+		strcpy(chunk_handle,((read_resp*)dfsmsg->data) ->chunk_handle);
+		//conect to the chunk server
+		if(createConnection(chunk_server,chunk_soc) == -1){
+			printf("%s: can not connect to the chunk server\n",__func__);
+			return -1;
+		}
+		create_read_data_req(&data_ptr,chunk_handle);
+		prepare_msg(READ_DATA_REQ, &msg, &data_ptr, sizeof(read_data_req));
+		print_msg(msg->msg_iov[0].iov_base);
+		if((sendmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+        	//reply from master
+        	if((recvmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		/*TODO: process received data
+		if first/last block... then do extra overhead*/
+		close(chunk_soc);
 	}
-	//read last block
-	
+	close(master_soc);
 	/*
-	find the number of blocks and corresponding block numbers to be read.
-	for each block to be read.. {
-	        send a message to master with file name and block number
-		reply from master with chunk id and chunk server details (ip and port I suppose)
-		send a read request to chunkserver
-		reply from chunkserver... if first/last block... then do extra overhead
-	}
         if failure return -errno*/
 	return 0;
 /*  printf("Inside read. Path is: %s buf is %s",path,buf);
@@ -212,20 +243,90 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 static int gfs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi)
 {
         int ret;
-        /*strcpy(filepath,rootpath);
-        strcat(filepath,filename);
-	find the block number where to write.
+	int i;
+	int chunk_soc;
+	write_req write_ptr;
+	write_data_req data_ptr;
+	host chunk_server[2];
+	char chunk_handle[64];
+	
+	int start_block = offset/CHUNK_SIZE;
+	int last_block = (offset+size)/CHUNK_SIZE;
+
+        if(createConnection(master,master_soc) == -1){
+		printf("%s: can not connect to the master server\n",__func__);
+		return -1;
+	}
+	
+	for(i=start_block;i<=last_block;i++){
+		create_write_req(&write_ptr);
+		prepare_msg(WRITE_REQ, &msg, &write_ptr, sizeof(write_req));
+		print_msg(msg->msg_iov[0].iov_base);
+		if((sendmsg(master_soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+        	//reply from master
+        	if((recvmsg(master_soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		//extract chunkserver details
+	 	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+		strcpy(chunk_server[0].ip_addr,((write_resp*)dfsmsg->data) ->ip_address_primary);
+		chunk_server[0].port = ((write_resp*)dfsmsg->data) ->port_primary;
+		strcpy(chunk_server[1].ip_addr,((write_resp*)dfsmsg->data) ->ip_address_secondary);
+		chunk_server[0].port = ((write_resp*)dfsmsg->data) ->port_secondary;
+		strcpy(chunk_handle,((write_resp*)dfsmsg->data) ->chunk_handle);
+		
+		//create connection with secondary chunk server
+		if(createConnection(chunk_server[1],chunk_soc) == -1){
+			printf("%s: can not connect to the chunk server\n",__func__);
+			return -1;
+		}
+		create_write_data_req(&data_ptr,chunk_handle,buf+(i-start_block)*CHUNK_SIZE);
+		prepare_msg(WRITE_DATA_REQ, &msg, &data_ptr, sizeof(write_data_req));
+		print_msg(msg->msg_iov[0].iov_base);
+		if((sendmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+        	//reply from chunkserver
+        	if((recvmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		close(chunk_soc);
+		//create connection with primary chunk server
+		if(createConnection(chunk_server[0],chunk_soc) == -1){
+			printf("%s: can not connect to the chunk server\n",__func__);
+			return -1;
+		}
+		if((sendmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+        	//reply from chunkserver
+        	if((recvmsg(chunk_soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		//TODO:Send a confirmation message to primary to commit the write
+		close(chunk_soc);
+			
+	}
+	close(master_soc);
+	/*
+        if failure return -errno*/
+	return 0;
+/*
         send a message to master with filename and block number
         reply from master.. failure if the write request is not an append to the last block...
 	if successful server returns 2 chunckservers to write to
         send a write (append) request to each chunkserver
         if successful reply from both chunkservers write successful.
-	There are multiple other options with write... to make sure of atomicity...
-	1. Either server returns only 1 primary chunk server... and somehow notifies the primary tht xyz is secondary.. 
-or primary after receiving write request checks with master regarding who is secondary... 
-	Then primary forwards the request to secondary and on success replies to client tht write is successful.. ensures ATOMIC write
-	2. Else.. client gets both chunk servers from master... while sending write request to primary.. the client also sends the details pof secondary.. 
-	Then primary forwards the request to secondary and on success replies to client tht write is successful.. ensures ATOMIC write
+	send write confirmation to primary
+	replyu from primary
         if failure return -errno*/
         return 0;
 
@@ -285,6 +386,8 @@ or primary after receiving write request checks with master regarding who is sec
 
 static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
 {
+	printf("This is read directory\n");
+	return 0;
 //client side code goes here
 /*        printf("Inside getdir Path is: %s\n",path);
         memset(tcp_buf,0,MAXLEN);
@@ -343,18 +446,6 @@ static struct fuse_operations gfs_oper = {
 	//.getxattr = (void*)dfs_getxattr,
 	//.setxattr = (void*)dfs_setxattr,
 };
-
-int client_init(int argc,char* argv[])
-{	
-	pthread_mutex_init(&seq_mutex, NULL);
-	populateIp(&master,argv[1]);
-	if((soc = createSocket())==-1){
-		printf("%s: Error creating socket\n",__func__);
-		return -1;
-	}
-	master.port = MASTER_LISTEN;
-	return 0;
-}
 
 int main(int argc, char *argv[])
 {

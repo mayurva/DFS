@@ -52,6 +52,17 @@ typedef struct dfs_msg_ {
 	void	*data;
 }dfs_msg;
 
+/*Data structures for message types*/
+typedef struct mkdir_req_{
+	char	path[MAX_FILENAME];
+	mode_t	mode;
+}mkdir_req;
+
+typedef struct open_req_{
+        char    path[MAX_FILENAME];
+        int flags;
+}open_req;
+
 /* Read data structures */
 
 typedef struct read_req_ {
