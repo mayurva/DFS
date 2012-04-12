@@ -15,6 +15,75 @@
 unsigned long long seq_num = 0;
 extern pthread_mutex_t seq_mutex;
 
+void print_msg(dfs_msg *msg)
+{
+		
+	switch(msg->msg_type)
+	{
+
+	        case HEARTBEAT:
+			break;
+
+        	case MAKE_DIR_REQ:
+			printf("MAKE_DIR_REQ: path is %s\n",((mkdir_req*)msg->data)->path);
+			break;
+
+	        case MAKE_DIR_RESP:
+			break;
+
+	        case OPEN_REQ:
+			printf("OPEN_REQ: path is %s\n",((open_req*)msg->data)->path);
+			break;
+
+		case OPEN_RESP:
+			break;
+
+	        case CREATE_REQ:
+			break;
+
+		case CREATE_RESP:
+			break;
+
+		case GETATTR_REQ:
+			printf("GETATTR_REQ: path is %s\n",((char*)msg->data));
+			break;
+
+		case GETATTR_RESP:
+			break;
+
+		case READDIR_REQ:
+			break;
+
+		case READDIR_RESP:
+			break;
+
+		case READ_REQ:
+			break;
+
+		case READ_RESP:
+			break;
+
+		case READ_DATA_REQ:
+			break;
+
+		case READ_DATA_RESP:
+			break;
+
+		case WRITE_REQ:
+			break;
+
+		case WRITE_RESP:
+			break;
+
+		case WRITE_DATA_REQ:
+			break;
+
+		case WRITE_DATA_RESP:
+			break;
+	}
+
+}
+
 int getRandom(int lower,int upper)
 {
 	struct timeval tv;
@@ -29,7 +98,7 @@ int populateIp(host *h,char *hostname)
 {
 	struct hostent *lh = gethostbyname(hostname);
 	if(lh){
-		strcpy(h->ip_addr,inet_ntoa( *( struct in_addr*)( lh -> h_addr_list[1])));
+		strcpy(h->ip_addr,inet_ntoa( *( struct in_addr*)( lh -> h_addr_list[0])));
 		return 0;
 	}
 	return -1;
@@ -165,7 +234,3 @@ void free_msg(struct msghdr *msg)
         free(msg);
 }
 
-void print_msg(struct msghdr *msg)
-{
-	printf("\n Message is :");
-}
