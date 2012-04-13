@@ -51,6 +51,5 @@ int client_init(int argc,char* argv[])
 	pthread_mutex_init(&seq_mutex, NULL);
 	strcpy(master.ip_addr,argv[1]);
 	master.port = MASTER_LISTEN;
-
 	return 0;
 }

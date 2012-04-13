@@ -82,6 +82,13 @@ static int gfs_mkdir(const char *path, mode_t mode)
 	mkdir_req data_ptr;
 	create_mkdir_req(&data_ptr,path,mode);
         prepare_msg(MAKE_DIR_REQ, &msg, &data_ptr, sizeof(mkdir_req)); 
+
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
+
         if(createConnection(master,master_soc) == -1){
 		printf("%s: can not connect to the master server\n",__func__);
 		return -1;
@@ -113,6 +120,12 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 	open_req data_ptr;
 	create_open_req(&data_ptr,path,fi->flags);
 	prepare_msg(OPEN_REQ, &msg, &data_ptr, sizeof(open_req));
+
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
         if(createConnection(master,master_soc) == -1){
                 printf("%s: can not connect to the master server\n",__func__);
                 return -1;
@@ -151,7 +164,12 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size)/CHUNK_SIZE;
-		
+	
+	if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+	
 	if(createConnection(master,master_soc) == -1){
 		printf("%s: can not connect to the master server\n",__func__);
 		return -1;
@@ -176,6 +194,11 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		chunk_server.port = ((read_resp*)dfsmsg->data) ->port;
 		strcpy(chunk_handle,((read_resp*)dfsmsg->data) ->chunk_handle);
 		//conect to the chunk server
+	        if((chunk_soc = createSocket())==-1){
+                	printf("%s: Error creating socket\n",__func__);
+                	return -1;
+        	}
+
 		if(createConnection(chunk_server,chunk_soc) == -1){
 			printf("%s: can not connect to the chunk server\n",__func__);
 			return -1;
@@ -200,6 +223,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 	/*
         if failure return -errno*/
 	return 0;
+
 /*  printf("Inside read. Path is: %s buf is %s",path,buf);
         sprintf(tcp_buf,"READ\n%s",path);
         send(sock,tcp_buf,strlen(tcp_buf),0);
@@ -268,6 +292,11 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size)/CHUNK_SIZE;
 
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
         if(createConnection(master,master_soc) == -1){
 		printf("%s: can not connect to the master server\n",__func__);
 		return -1;
@@ -295,6 +324,11 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		strcpy(chunk_handle,((write_resp*)dfsmsg->data) ->chunk_handle);
 		
 		//create connection with secondary chunk server
+	        if((chunk_soc = createSocket())==-1){
+                	printf("%s: Error creating socket\n",__func__);
+	                return -1;
+        	}
+
 		if(createConnection(chunk_server[1],chunk_soc) == -1){
 			printf("%s: can not connect to the chunk server\n",__func__);
 			return -1;
@@ -313,6 +347,11 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
         	}
 		close(chunk_soc);
 		//create connection with primary chunk server
+	        if((chunk_soc = createSocket())==-1){
+                	printf("%s: Error creating socket\n",__func__);
+                	return -1;
+        	}
+
 		if(createConnection(chunk_server[0],chunk_soc) == -1){
 			printf("%s: can not connect to the chunk server\n",__func__);
 			return -1;
@@ -334,16 +373,6 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	/*
         if failure return -errno*/
 	return 0;
-/*
-        send a message to master with filename and block number
-        reply from master.. failure if the write request is not an append to the last block...
-	if successful server returns 2 chunckservers to write to
-        send a write (append) request to each chunkserver
-        if successful reply from both chunkservers write successful.
-	send write confirmation to primary
-	replyu from primary
-        if failure return -errno*/
-        return 0;
 
 /*	printf("Inside write. Path is: %s buf is %s",path,buf);
         sprintf(tcp_buf,"WRITE\n%s",path);
@@ -403,6 +432,7 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 {
 	printf("This is read directory\n");
 	return 0;
+
 //client side code goes here
 /*        printf("Inside getdir Path is: %s\n",path);
         memset(tcp_buf,0,MAXLEN);
