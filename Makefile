@@ -12,7 +12,7 @@ all: $(OBJ) client master chunkserver
 $(OBJ):$(SRC)
 
 client:
-	$(CC) -g $(FLAGS) -o client client.c tcp_utils.c client_util.c
+	$(CC)  $(FLAGS) -o client client.c tcp_utils.c client_util.c -g
 
 master:
 	$(CC) -o master master.o tcp_utils.o -lpthread -g

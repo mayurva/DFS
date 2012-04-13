@@ -207,6 +207,7 @@ void prepare_msg(int msg_type, struct msghdr **msg, void * data_ptr, int data_le
         *msg = (struct msghdr*) malloc(sizeof(struct msghdr));
 	struct iovec *iov = (struct iovec*) malloc(sizeof(struct iovec) * 2);
 	memset(*msg, 0, sizeof(struct msghdr));
+	memset(dfsmsg, 0, sizeof(dfs_msg));
 	memset(iov, 0, sizeof(iov));
 
 	pthread_mutex_lock(&seq_mutex);

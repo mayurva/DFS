@@ -186,38 +186,58 @@ void* connect_chunkserver_thread(void* ptr)
 void* handle_client_request(void *arg)
 {
 	struct msghdr *msg;
-	int soc = (int)arg;
+	int soc  = (int)arg;
+
 	char * data = (char *) malloc(MAX_DATA_SZ);
 	prepare_msg(0, &msg, data, MAX_DATA_SZ);
-
 	recvmsg(soc, msg, 0);
 
 	dfs_msg *dfsmsg;
 	dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;	
-#ifdef DEBUG
+	#ifdef DEBUG
 	printf("received message from client\n");
-#endif
+	#endif
 	//extract the message type
-	print_msg(&msg);
+	//print_msg(dfsmsg);
 	
 	switch (dfsmsg->msg_type) {
 
 		case CREATE_REQ:
+			#ifdef DEBUG
+			printf("received create request from client\n");
+			#endif
 			break;
 
 		case OPEN_REQ:
+			#ifdef DEBUG
+			printf("received open request from client\n");
+			#endif
 			break;
 
 		case GETATTR_REQ:
+			#ifdef DEBUG
+			printf("received getattr request from client\n");
+			#endif
+			dfsmsg->status = -1;
+			sendmsg(soc, msg, 0);
 			break;
 
 		case READDIR_REQ:
+			#ifdef DEBUG
+			printf("received readdir request from client\n");
+			#endif
 			break;
 
 		case READ_REQ:
+			#ifdef DEBUG
+			printf("received read request from client\n");
+			#endif
 			break;
 
 		case WRITE_REQ:
+			#ifdef DEBUG
+			printf("received write request from client\n");
+			#endif
 			break;
 
 	}
@@ -225,20 +245,25 @@ void* handle_client_request(void *arg)
 
 /* Thread to handle requests from clients */
 void* client_request_listener(void* ptr){
+	struct msghdr *msg;
+	static int id = 0;
 	int soc;
-	struct msghdr msg;
 
 	#ifdef DEBUG
 		printf("this thread listens connection requests from clients\n");
 	#endif
 	
 	while(1) {
+
 		soc = acceptConnection(client_request_socket);
 		#ifdef DEBUG
-			printf("connected to client\n");
+			printf("connected to client id-%d\n", ++id);
 		#endif
+		if (thr_id == MAX_THR) {
+			thr_id = 0;
+		}
 		if((pthread_create(&threads[thr_id++], NULL, handle_client_request, (void*)soc)) != 0) {
-			printf("%s: Failed to create thread to handle client requests %d\n", __func__, soc);
+			printf("%s: Failed to create thread to handle client requests %d\n", __func__, thr_id);
 		}
 	}
 }

@@ -8,6 +8,7 @@
 #include<sys/socket.h>
 #include<stdlib.h>
 #include<string.h>
+#include<errno.h>
 struct msghdr *msg;
 host master;
 int master_soc;
@@ -17,27 +18,41 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
 	prepare_msg(GETATTR_REQ, &msg, path, strlen(path));
-	if(createConnection(master,master_soc) == -1){
-		printf("%s: can not connect to the master server\n",__func__);
-		return -1;
-	}
 	print_msg(msg->msg_iov[0].iov_base);
+
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
+        if(createConnection(master,master_soc) == -1){
+                printf("%s: can not connect to the master server - error-%d\n",__func__, errno);
+                return -1;
+        }
 
 	//send a message to master
 	if((sendmsg(master_soc,msg,0))==-1){
-		printf("%s: message sending failed\n",__func__);
+		printf("%s: message sending failed - %d\n",__func__, errno);
 		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("%s: Getattr request sent\n",__func__);
+	#endif
 	}
 	//reply from master
 	if((recvmsg(master_soc,msg,0))==-1){
-		printf("%s: message receipt failed\n",__func__);
+		printf("%s: message receipt failed - %d\n",__func__, errno);
 		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("%s: Getattr response received from server\n",__func__);
+	#endif
 	}
 	close(master_soc);
 	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
 	//if failure return -errno
-	if(dfsmsg->status!=0){
-		return -*(int*)dfsmsg->data;
+	if(dfsmsg->status != 0){
+		return -1;
 	}
 	//copy the data into stbuf (if required)
 	stbuf = (struct stat*) dfsmsg->data;
@@ -83,7 +98,7 @@ static int gfs_mkdir(const char *path, mode_t mode)
                 printf("%s: message receipt failed\n",__func__);
                 return -1;
         }
-	close(master_soc);
+	//close(master_soc);
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
         //if failure return -errno
         if(dfsmsg->status!=0){
@@ -115,7 +130,7 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
                 return -1;
         }
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
-	close(master_soc);
+	//close(master_soc);
         //if failure return -errno
         if(dfsmsg->status!=0){
                 return -*(int*)dfsmsg->data;
