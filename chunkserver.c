@@ -125,8 +125,24 @@ int main(int argc, char * argv[])
         return 0;
 }
 
-int chunk_read(read_data_req * req)
+int chunk_read(read_data_req * req, read_data_resp *resp)
 {
+	char	path[256];
+	
+	strcpy(path, chunk_path);
+	strcat(path, req->chunk_handle);
+
+	FILE * chunk_fd = fopen(path, "r");
+	if (chunk_fd == NULL) {
+		printf("cannot open chunk file for reading - %s\n", path);
+		return -1;
+	}
+
+	size_t retval = fread(resp->chunk, CHUNK_SIZE, 1, chunk_fd);
+	if (retval != CHUNK_SIZE) {
+		printf("failure: only %d bytes written\n", retval );
+                return -1;
+        } 
 }
 
 
@@ -139,7 +155,7 @@ int chunk_write(write_data_req *req)
 
 	FILE * chunk_fd = fopen(path, "w+");
 	if (chunk_fd == NULL) {
-		printf("cannot create chunk file - %s\n", path);
+		printf("cannot open chunk file for writing - %s\n", path);
 		return -1;
 	}
 
@@ -156,14 +172,20 @@ void* handle_client_request(void *arg)
         int soc = (int)arg;
         char * data = (char *) malloc(MAX_DATA_SZ);
         prepare_msg(0, &msg, data, MAX_DATA_SZ);
+	read_data_resp * resp;
 
-        recvmsg(soc, msg, 0);
+        int retval = recvmsg(soc, msg, 0);
+	if (retval == -1) {
+		printf("failed to receive message from client - errno-%d\n", errno);
+	} else {
+		#ifdef DEBUG
+        	printf("received message from client\n");
+		#endif
+	}
 
         dfs_msg *dfsmsg;
         dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;
-#ifdef DEBUG
-        printf("received message from client\n");
-#endif
+
         //extract the message type
         print_msg(dfsmsg);
 
@@ -173,13 +195,36 @@ void* handle_client_request(void *arg)
                         break;
 
                 case READ_DATA_REQ:
-			dfsmsg->status = chunk_read(msg->msg_iov[1].iov_base);
-                        break;
+			resp = (read_data_resp*) malloc(sizeof(read_data_resp));
+			dfsmsg->status = chunk_read(msg->msg_iov[1].iov_base, resp);
+			msg->msg_iov[1].iov_base = resp;
+			msg->msg_iov[1].iov_len = sizeof(read_data_resp);
+			dfsmsg->msg_type = READ_DATA_RESP;
+			retval = sendmsg(soc, msg, 0); 
+			if (retval == -1) {
+				printf("failed to send read reply to client - errno-%d\n", errno);
+			} else {
+				#ifdef DEBUG
+				printf("received message from client\n");
+				#endif
+			}
+			break;
 
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
-                        break;
-        }
+			dfsmsg->msg_type = WRITE_DATA_RESP; 
+			msg->msg_iov[1].iov_base = NULL;
+			msg->msg_iov[1].iov_len = 0;
+			retval = sendmsg(soc, msg, 0); 
+			if (retval == -1) {
+				printf("failed to send write reply to client - errno-%d\n", errno);
+			} else {
+				#ifdef DEBUG
+				printf("received message from client\n");
+				#endif
+			}
+			break;
+	}
 }
 	
 
