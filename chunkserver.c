@@ -125,6 +125,31 @@ int main(int argc, char * argv[])
         return 0;
 }
 
+int chunk_read(read_data_req * req)
+{
+}
+
+
+int chunk_write(write_data_req *req)
+{
+	char	path[256];
+	
+	strcpy(path, chunk_path);
+	strcat(path, req->chunk_handle);
+
+	FILE * chunk_fd = fopen(path, "w+");
+	if (chunk_fd == NULL) {
+		printf("cannot create chunk file - %s\n", path);
+		return -1;
+	}
+
+	size_t retval = fwrite(req->chunk, CHUNK_SIZE, 1, chunk_fd);
+	if (retval != CHUNK_SIZE) {
+		printf("failure: only %d bytes written\n", retval );
+                return -1;
+        } 
+}
+
 void* handle_client_request(void *arg)
 {	
         struct msghdr *msg;
@@ -140,7 +165,7 @@ void* handle_client_request(void *arg)
         printf("received message from client\n");
 #endif
         //extract the message type
-        print_msg(msg);
+        print_msg(dfsmsg);
 
         switch (dfsmsg->msg_type) {
 
@@ -148,9 +173,11 @@ void* handle_client_request(void *arg)
                         break;
 
                 case READ_DATA_REQ:
+			dfsmsg->status = chunk_read(msg->msg_iov[1].iov_base);
                         break;
 
                 case WRITE_DATA_REQ:
+			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
                         break;
         }
 }
