@@ -59,8 +59,8 @@ typedef struct mkdir_req_{
 }mkdir_req;
 
 typedef struct open_req_{
-        char    path[MAX_FILENAME];
-        int flags;
+	char    path[MAX_FILENAME];
+	int flags;
 }open_req;
 
 /* Read data structures */

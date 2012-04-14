@@ -19,13 +19,14 @@ typedef struct chunkserver_{
 }chunkserver;
 
 typedef struct file_info_ {
-struct hsearch_data *chunk_list;
-struct stat filestat;
+	struct hsearch_data *chunk_list;
+	int num_of_chunks;
+	struct stat filestat;
 }file_info;
 
 typedef struct chunk_info_ {
 char chunk_handle[64];
-int chunksever_id[2];
+int chunkserver_id[2];
 }chunk_info;
 
 void* connect_chunkserver_thread(void*);

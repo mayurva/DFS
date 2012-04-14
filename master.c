@@ -12,12 +12,20 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #define DEBUG
 
 #define  MAX_DATA_SZ 1000
 
 struct hsearch_data *file_list;
 host master;
+
+int file_inode =0;
+unsigned chunk_id = 0;
+int secondary_count = 1;
 
 int client_request_socket;
 int heartbeat_socket;
@@ -26,6 +34,10 @@ chunkserver chunk_servers[NUM_CHUNKSERVERS];
 pthread_mutex_t seq_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
+
+char* itoa(int n)
+{
+}
 
 int master_init(char *master_ip)
 {
@@ -187,6 +199,10 @@ void* handle_client_request(void *arg)
 {
 	struct msghdr *msg;
 	int soc  = (int)arg;
+	open_req *open_req_obj;
+	write_req *write_req_obj;
+	ENTRY e,*ep,*ep_temp;
+	struct timeval tv;
 
 	char * data = (char *) malloc(MAX_DATA_SZ);
 	prepare_msg(0, &msg, data, MAX_DATA_SZ);
@@ -210,8 +226,55 @@ void* handle_client_request(void *arg)
 
 		case OPEN_REQ:
 			#ifdef DEBUG
-			printf("received open request from client\n");
+				printf("received open request from client\n");
 			#endif
+			open_req_obj = dfsmsg->data;
+			e.key = open_req_obj->path;
+			if(hsearch_r(e,FIND,&ep,file_list) ==0){
+				if(open_req_obj->flags|O_CREAT){
+					file_info *new_file = (file_info*)malloc(sizeof(file_info));
+					hcreate_r(10,new_file->chunk_list);
+
+					new_file->filestat.st_dev = 0;
+					pthread_mutex_lock(&seq_mutex);
+						new_file->filestat.st_ino = file_inode++;
+					pthread_mutex_unlock(&seq_mutex);
+					new_file->num_of_chunks = 0;
+
+					new_file->filestat.st_mode = 00777;
+					new_file->filestat.st_nlink = 0;
+					new_file->filestat.st_uid = 0;
+					new_file->filestat.st_gid = 0;
+					new_file->filestat.st_rdev = 0;
+					new_file->filestat.st_size = 0;
+					new_file->filestat.st_blksize = CHUNK_SIZE;
+					new_file->filestat.st_blocks = new_file->filestat.st_size/512;
+					gettimeofday(&tv,NULL);
+					new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
+					e.data = new_file;
+					if(hsearch_r(e,ENTER,&ep,file_list) == 0){
+						printf("Error creating file %s\n",open_req_obj->path);
+						//ret_val = -1;
+					}
+					else{			
+						//TODO:Reply success to the client
+					}
+				}
+				else{
+					#ifdef DEBUG	
+						printf("File not present\n");
+					#endif
+					//TODO:Reply error to the client
+				}
+			}
+			else{
+				if(open_req_obj->flags|O_CREAT){
+					printf("File already present\n");
+				}
+				else{
+					//TODO:IF it is open request
+				}
+			}
 			break;
 
 		case GETATTR_REQ:
@@ -236,8 +299,33 @@ void* handle_client_request(void *arg)
 
 		case WRITE_REQ:
 			#ifdef DEBUG
-			printf("received write request from client\n");
+				printf("received write request from client\n");
 			#endif
+			write_req_obj = dfsmsg->data;
+			e.key = write_req_obj->filename;
+			if(hsearch_r(e,FIND,&ep,file_list)==0){
+				printf("File not present\n");
+				//TODO:send error message
+			}
+			else{
+				chunk_info *c=(chunk_info*)malloc(sizeof(chunk_info));
+				if(((file_info*)ep->data)->num_of_chunks>=write_req_obj->chunk_index){
+					printf("Error not an append operation\n");
+					//TODO: Send error message
+				}
+				
+				strcpy(c->chunk_handle,itoa(chunk_id));
+				//TODO: what to do if a chunkserver is down
+				e.key = itoa(((file_info*)ep->data)->num_of_chunks);
+				c->chunkserver_id[0] = chunk_id%NUM_CHUNKSERVERS;
+				c->chunkserver_id[1] = (c->chunkserver_id[0] + (secondary_count))%NUM_CHUNKSERVERS;
+				secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
+				e.data = c;
+				((file_info*)ep->data)->num_of_chunks++;
+				hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
+				//TODO: build response structure for client
+				//Send a message to client
+			}
 			break;
 
 	}
