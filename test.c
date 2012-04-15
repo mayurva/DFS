@@ -7,17 +7,19 @@
 int read_file(char *filename)
 {
 	FILE *fd;
+	int n;
 	if((fd = fopen(filename,"r+"))==NULL){
 		printf("Error opening file\n");
 		return -1;
 	}
 	printf("Enter which block to be read: ");
-	scnaf("%d",&n)
+	scanf("%d",&n);
 	//Read the nth block if exists throw error if not...	
 } 
 
 int write_file(char *filename)
 {
+	int n;
 	FILE *fd;
 	if((fd = fopen(filename,"a+"))==NULL){
 		printf("Error opening file\n");
