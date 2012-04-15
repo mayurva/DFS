@@ -8,7 +8,7 @@
 #define CLIENT_LISTEN_PORT 5000
 #define CHUNKSERVER_LISTEN_PORT 6000
 #define MAX_THR 100
-#define NUM_CHUNKSERVERS 4
+#define NUM_CHUNKSERVERS 2
 typedef struct chunkserver_{
 	char		ip_addr[20];
 	int		heartbeat_port;

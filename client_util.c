@@ -16,6 +16,7 @@ int create_open_req(open_req *ptr, char *path, int flags)
 {
 	strcpy(ptr->path,path);
 	ptr->flags = flags;
+	printf(" create flags - %d\n", flags);
 	return 0;
 }
 

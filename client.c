@@ -13,11 +13,14 @@ struct msghdr *msg;
 host master;
 int master_soc;
 pthread_mutex_t seq_mutex;
+#define MAX_BUF_SZ (2 * 1024)
 
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
-	prepare_msg(GETATTR_REQ, &msg, path, strlen(path));
+	char * buf = (char*) malloc (MAX_BUF_SZ);
+	strcpy(buf, path);
+	prepare_msg(GETATTR_REQ, &msg, buf, MAX_BUF_SZ);
 	print_msg(msg->msg_iov[0].iov_base);
 
         if((master_soc = createSocket())==-1){
@@ -52,10 +55,17 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
 	//if failure return -errno
 	if(dfsmsg->status != 0){
-		return -1;
+	#ifdef DEBUG
+		printf("%s: Getattr status is - %d\n",__func__, dfsmsg->status);
+	#endif
+		return dfsmsg->status;
 	}
 	//copy the data into stbuf (if required)
-	stbuf = (struct stat*) dfsmsg->data;
+	stbuf = (struct stat*) msg->msg_iov[1].iov_base;
+	memcpy(stbuf, (struct stat*) msg->msg_iov[1].iov_base, sizeof(struct stat));
+	#ifdef DEBUG
+		printf("%s: Getattr status is - %d size = %d size = %d\n",__func__, dfsmsg->status, stbuf->st_blksize, ((struct stat*) msg->msg_iov[1].iov_base)->st_blksize);
+	#endif
 	return 0;
 /*	
 _//client side code goes here
@@ -109,6 +119,44 @@ static int gfs_mkdir(const char *path, mode_t mode)
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
         //if failure return -errno
         if(dfsmsg->status != 0){
+                return -1;
+        }
+        return 0;
+}
+
+static int gfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+        int ret;
+	open_req data_ptr;
+	create_open_req(&data_ptr,path,fi->flags | O_CREAT);
+	prepare_msg(OPEN_REQ, &msg, &data_ptr, sizeof(open_req));
+
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
+        if(createConnection(master,master_soc) == -1){
+                printf("%s: can not connect to the master server\n",__func__);
+                return -1;
+        }
+	print_msg(msg->msg_iov[0].iov_base);
+	printf("flags are ------ %d\n", ((open_req*)msg->msg_iov[1].iov_base)->flags);
+	
+	//send a message to master
+        if((sendmsg(master_soc,msg,0))==-1){
+                printf("%s: message sending failed\n",__func__);
+                return -1;
+        }
+        //reply from master
+        if((recvmsg(master_soc,msg,0))==-1){
+                printf("%s: message receipt failed\n",__func__);
+                return -1;
+        }
+        dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+	close(master_soc);
+        //if failure return -errno
+        if(dfsmsg->status!=0){
                 return -1;
         }
         return 0;
@@ -478,6 +526,7 @@ static struct fuse_operations gfs_oper = {
 	//.mknod = (void *)gfs_mknod,
 	.mkdir = (void *)gfs_mkdir,
 	.open = (void *)gfs_open,
+	.create = (void *)gfs_create,
 	.read = (void *)gfs_read,
 	.write = (void *)gfs_write,
 	.readdir = (void *)gfs_readdir,

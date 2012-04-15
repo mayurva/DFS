@@ -18,7 +18,7 @@
 
 #define DEBUG
 
-#define  MAX_DATA_SZ 1000
+#define  MAX_DATA_SZ (2 * 1024)
 
 struct hsearch_data *file_list;
 host master;
@@ -228,10 +228,10 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 				printf("received open request from client\n");
 			#endif
-			open_req_obj = msg->msg_iov[1].iov_base;
+			open_req_obj = (open_req*) msg->msg_iov[1].iov_base;
 			e.key = open_req_obj->path;
 			#ifdef DEBUG
-				printf("received open request for file - %s\n", e.key);
+				printf("received open request for file - %s flags - %d, check - %d\n", e.key, open_req_obj->flags, open_req_obj->flags & O_CREAT);
 			#endif
 
 			/* Search for file in master file list */
@@ -292,8 +292,8 @@ void* handle_client_request(void *arg)
 
 			/* Send reply to client */
 			dfsmsg->status = retval;
-			sendmsg(soc, msg, 0);
 			dfsmsg->msg_type = OPEN_RESP;
+			sendmsg(soc, msg, 0);
 			break;
 
 		case GETATTR_REQ:
@@ -310,10 +310,12 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present - %s\n", e.key);
 				#endif
-				retval = -1;
+				retval = -ENOENT;
 			/* File found */
 			} else {
-				memcpy(dfsmsg->data, &((file_info*)ep->data)->filestat, sizeof(struct stat)); 
+				memcpy(msg->msg_iov[1].iov_base, &((file_info*)ep->data)->filestat, sizeof(struct stat)); 
+				msg->msg_iov[1].iov_len = sizeof(struct stat);
+				printf("chunksz = %d\n", ((struct stat*)msg->msg_iov[1].iov_base)->st_blksize);	
 				retval = 0;
 			}
 
@@ -341,7 +343,7 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present\n");
 				#endif
-				retval = -1;
+				retval = -ENOENT;
 			/* File found */
 			} else {
 				/* TODO : check if the read size of within the chunk size.. current size variable must be maintained within chunk_info */
@@ -349,7 +351,7 @@ void* handle_client_request(void *arg)
 					#ifdef DEBUG
 					printf("Read error - file does not exist\n");
 					#endif
-					retval = -1;
+					retval = -ENOENT;
 				} else {
 
 					/* Prepare chunk object */	
@@ -362,7 +364,7 @@ void* handle_client_request(void *arg)
 						#ifdef DEBUG
 						printf("Read error - chunk does not exist\n");
 						#endif
-						retval = -1;
+						retval = -ENODATA;
 					/* Chunk found in hashtable */
 					} else {
 						read_resp * resp = (read_resp*) malloc(sizeof(read_req));
@@ -398,7 +400,7 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present\n");
 				#endif
-				retval = -1;
+				retval = -ENOENT;
 			/* File found */
 			} else {
 				/* For now, Only next chunk can be appended */
@@ -408,7 +410,7 @@ void* handle_client_request(void *arg)
 					#ifdef DEBUG
 					printf("Error not an append operation\n");
 					#endif
-					retval = -1;
+					retval = -EPERM;
 				} else {
 
 					/* Prepare chunk object */	

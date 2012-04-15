@@ -32,7 +32,7 @@ void print_msg(dfs_msg *msg)
 			break;
 
 	        case OPEN_REQ:
-			printf("OPEN_REQ: path is %s\n",((open_req*)msg->data)->path);
+			printf("OPEN_REQ: path is %s flags %d\n",((open_req*)msg->data)->path, ((open_req*)msg->data)->flags);
 			break;
 
 		case OPEN_RESP:
