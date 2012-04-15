@@ -7,6 +7,7 @@
 int read_file(char *filename)
 {
 	FILE *fd;
+	char *ptr = (char*)malloc(CHUNK_SIZE+1);
 	int n;
 	if((fd = fopen(filename,"r+"))==NULL){
 		printf("Error opening file\n");
@@ -15,11 +16,21 @@ int read_file(char *filename)
 	printf("Enter which block to be read: ");
 	scanf("%d",&n);
 	//Read the nth block if exists throw error if not...	
+	fseek(fd,(n-1)*CHUNK_SIZE,SEEK_SET);
+	if(fread(ptr,CHUNK_SIZE,1,fd) == 0){
+		printf("Read failure\n");
+		fclose(fd);
+		return -1;
+	}
+	printf("Data is\n%s\n",ptr);
+	fclose(fd);
+	return 0;
 } 
 
 int write_file(char *filename)
 {
-	int n;
+	int n,i;
+	char *ptr = (char*)malloc(CHUNK_SIZE+1);
 	FILE *fd;
 	if((fd = fopen(filename,"a+"))==NULL){
 		printf("Error opening file\n");
@@ -27,7 +38,20 @@ int write_file(char *filename)
 	}
 	printf("Enter number of blocks to be written: ");
 	scanf("%d",&n);
+
 	//write n blocks of random data each of size CHUNK_SIZE
+	for(i=0;i<n;i++){
+		memset(ptr,'a'+i,CHUNK_SIZE);
+		ptr[CHUNK_SIZE] = '\0';
+		if(fwrite(ptr,CHUNK_SIZE,1,fd) == 0){
+			printf("Write failure\n");
+			fclose(fd);
+			return -1;
+		}
+	}	
+	printf("Write successful\n");
+	fclose(fd);
+	return 0;
 }
 
 int main()
@@ -43,8 +67,10 @@ int main()
 		printf("3 : Open for writing\n");
 		printf("Enter a choice: ");
 		scanf("%d",&ch);
-		printf("Enter filename: ");
-		gets(filename);
+		if(ch>0 && ch <4){
+			printf("Enter filename: ");
+			scanf("%s",filename);
+		}
 		switch(ch){
 			case 0:
 				exit(0);
