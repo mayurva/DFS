@@ -228,7 +228,7 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 				printf("received open request from client\n");
 			#endif
-			open_req_obj = dfsmsg->data;
+			open_req_obj = msg->msg_iov[1].iov_base;
 			e.key = open_req_obj->path;
 			#ifdef DEBUG
 				printf("received open request for file - %s\n", e.key);
@@ -300,7 +300,10 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received getattr request from client\n");
 			#endif
-			e.key = (char*)dfsmsg->data;
+			e.key = (char*)msg->msg_iov[1].iov_base;
+			#ifdef DEBUG
+			printf("file is : %s\n", e.key);
+			#endif
 
 			/* File not found */
 			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
@@ -330,7 +333,7 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received read request from client\n");
 			#endif
-			read_req_obj = dfsmsg->data;
+			read_req_obj = msg->msg_iov[1].iov_base;
 			e.key = read_req_obj->filename;
 
 			/* File not found */
@@ -387,7 +390,7 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 				printf("received write request from client\n");
 			#endif
-			write_req_obj = dfsmsg->data;
+			write_req_obj = msg->msg_iov[1].iov_base;
 			e.key = write_req_obj->filename;
 
 			/* File not found */
