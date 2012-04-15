@@ -25,8 +25,9 @@ typedef struct file_info_ {
 }file_info;
 
 typedef struct chunk_info_ {
-char chunk_handle[64];
-int chunkserver_id[2];
+	char chunk_handle[64];
+	int chunkserver_id[2];
+	int last_read;
 }chunk_info;
 
 void* connect_chunkserver_thread(void*);

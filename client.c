@@ -105,11 +105,11 @@ static int gfs_mkdir(const char *path, mode_t mode)
                 printf("%s: message receipt failed\n",__func__);
                 return -1;
         }
-	//close(master_soc);
+	close(master_soc);
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
         //if failure return -errno
-        if(dfsmsg->status!=0){
-                return -*(int*)dfsmsg->data;
+        if(dfsmsg->status != 0){
+                return -1;
         }
         return 0;
 }
@@ -143,10 +143,10 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
                 return -1;
         }
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
-	//close(master_soc);
+	close(master_soc);
         //if failure return -errno
         if(dfsmsg->status!=0){
-                return -*(int*)dfsmsg->data;
+                return -1;
         }
         return 0;
 }

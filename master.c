@@ -35,9 +35,6 @@ pthread_mutex_t seq_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
 
-char* itoa(int n)
-{
-}
 
 int master_init(char *master_ip)
 {
@@ -199,10 +196,13 @@ void* handle_client_request(void *arg)
 {
 	struct msghdr *msg;
 	int soc  = (int)arg;
-	open_req *open_req_obj;
-	write_req *write_req_obj;
 	ENTRY e,*ep,*ep_temp;
 	struct timeval tv;
+	int retval = 0;
+
+	open_req *open_req_obj;
+	write_req *write_req_obj;
+	read_req *read_req_obj;
 
 	char * data = (char *) malloc(MAX_DATA_SZ);
 	prepare_msg(0, &msg, data, MAX_DATA_SZ);
@@ -230,17 +230,26 @@ void* handle_client_request(void *arg)
 			#endif
 			open_req_obj = dfsmsg->data;
 			e.key = open_req_obj->path;
-			if(hsearch_r(e,FIND,&ep,file_list) ==0){
-				if(open_req_obj->flags|O_CREAT){
-					file_info *new_file = (file_info*)malloc(sizeof(file_info));
-					hcreate_r(10,new_file->chunk_list);
+			#ifdef DEBUG
+				printf("received open request for file - %s\n", e.key);
+			#endif
 
+			/* Search for file in master file list */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
+
+				/* File is being created */
+				if(open_req_obj->flags & O_CREAT) {
+					
+					/* Create new object for thus file */
+					file_info *new_file = (file_info*)malloc(sizeof(file_info));
+					/* Initialize hash table for chunks of this file */
+					hcreate_r(10,new_file->chunk_list);
+					/* Initialize file stats */
 					new_file->filestat.st_dev = 0;
 					pthread_mutex_lock(&seq_mutex);
 						new_file->filestat.st_ino = file_inode++;
 					pthread_mutex_unlock(&seq_mutex);
 					new_file->num_of_chunks = 0;
-
 					new_file->filestat.st_mode = 00777;
 					new_file->filestat.st_nlink = 0;
 					new_file->filestat.st_uid = 0;
@@ -251,37 +260,63 @@ void* handle_client_request(void *arg)
 					new_file->filestat.st_blocks = new_file->filestat.st_size/512;
 					gettimeofday(&tv,NULL);
 					new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
+								
 					e.data = new_file;
-					if(hsearch_r(e,ENTER,&ep,file_list) == 0){
+					if(hsearch_r(e, ENTER, &ep, file_list) == 0){
 						printf("Error creating file %s\n",open_req_obj->path);
-						//ret_val = -1;
+						retval = -1;
+					} else {
+						retval = 0;			
 					}
-					else{			
-						//TODO:Reply success to the client
-					}
-				}
-				else{
+				/* File is being opened */
+				} else {
 					#ifdef DEBUG	
-						printf("File not present\n");
+						printf("File not found at master\n");
 					#endif
-					//TODO:Reply error to the client
+					retval = 0;
 				}
-			}
-			else{
-				if(open_req_obj->flags|O_CREAT){
+
+			/* File exists */
+			} else {
+				/* File to be created already exists - failure */
+				if(open_req_obj->flags & O_CREAT){
+					#ifdef DEBUG	
 					printf("File already present\n");
-				}
-				else{
-					//TODO:IF it is open request
+					#endif
+					retval = -1;
+				/* File to to opened is found at master - success */
+				} else {
+					retval = 0;
 				}
 			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			sendmsg(soc, msg, 0);
+			dfsmsg->msg_type = OPEN_RESP;
 			break;
 
 		case GETATTR_REQ:
 			#ifdef DEBUG
 			printf("received getattr request from client\n");
 			#endif
-			dfsmsg->status = -1;
+			e.key = (char*)dfsmsg->data;
+
+			/* File not found */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
+				#ifdef DEBUG
+				printf("File not present - %s\n", e.key);
+				#endif
+				retval = -1;
+			/* File found */
+			} else {
+				memcpy(dfsmsg->data, &((file_info*)ep->data)->filestat, sizeof(struct stat)); 
+				retval = 0;
+			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			dfsmsg->msg_type = GETATTR_RESP;
 			sendmsg(soc, msg, 0);
 			break;
 
@@ -295,6 +330,57 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received read request from client\n");
 			#endif
+			read_req_obj = dfsmsg->data;
+			e.key = read_req_obj->filename;
+
+			/* File not found */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
+				#ifdef DEBUG
+				printf("File not present\n");
+				#endif
+				retval = -1;
+			/* File found */
+			} else {
+				/* TODO : check if the read size of within the chunk size.. current size variable must be maintained within chunk_info */
+				if(((file_info*)ep->data)->num_of_chunks > read_req_obj->chunk_index){
+					#ifdef DEBUG
+					printf("Read error - file does not exist\n");
+					#endif
+					retval = -1;
+				} else {
+
+					/* Prepare chunk object */	
+					char temp[10];
+					sprintf(temp, "%d", read_req_obj->chunk_index);
+					e.key = temp;
+
+					/* Chunk not found in hashtable */
+					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
+						#ifdef DEBUG
+						printf("Read error - chunk does not exist\n");
+						#endif
+						retval = -1;
+					/* Chunk found in hashtable */
+					} else {
+						read_resp * resp = (read_resp*) malloc(sizeof(read_req));
+						chunk_info *c = (chunk_info*)ep_temp->data;
+						c->last_read = (c->last_read + 1) % 2;	
+						/* Prepare response */
+						strcpy(resp->ip_address, chunk_servers[c->chunkserver_id[c->last_read]].ip_addr);
+						resp->port = chunk_servers[c->chunkserver_id[c->last_read]].client_port;
+						strcpy(resp->chunk_handle, c->chunk_handle);
+						msg->msg_iov[1].iov_base = resp;
+						msg->msg_iov[1].iov_len = sizeof(read_resp);
+						retval = 0;
+					}
+				}
+
+			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			dfsmsg->msg_type = READ_RESP;
+			sendmsg(soc, msg, 0);
 			break;
 
 		case WRITE_REQ:
@@ -303,29 +389,62 @@ void* handle_client_request(void *arg)
 			#endif
 			write_req_obj = dfsmsg->data;
 			e.key = write_req_obj->filename;
-			if(hsearch_r(e,FIND,&ep,file_list)==0){
+
+			/* File not found */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0){
+				#ifdef DEBUG
 				printf("File not present\n");
-				//TODO:send error message
-			}
-			else{
-				chunk_info *c=(chunk_info*)malloc(sizeof(chunk_info));
-				if(((file_info*)ep->data)->num_of_chunks>=write_req_obj->chunk_index){
+				#endif
+				retval = -1;
+			/* File found */
+			} else {
+				/* For now, Only next chunk can be appended */
+				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
+				          Also, a current size variable must be maintained within chunk_info */
+				if(((file_info*)ep->data)->num_of_chunks != write_req_obj->chunk_index){
+					#ifdef DEBUG
 					printf("Error not an append operation\n");
-					//TODO: Send error message
+					#endif
+					retval = -1;
+				} else {
+
+					/* Prepare chunk object */	
+					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
+					sprintf(c->chunk_handle, "%d", read_req_obj->chunk_index);
+					char temp[10];
+					sprintf(temp, "%d", ((file_info*)ep->data)->num_of_chunks);
+					e.key = temp;
+
+					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
+
+					/* Assign primary chunkserver */
+					c->chunkserver_id[0] = chunk_id % NUM_CHUNKSERVERS;
+					pthread_mutex_lock(&seq_mutex);
+					chunk_id++;
+					pthread_mutex_unlock(&seq_mutex);
+
+					/* Assign secondary chunkserver */
+					c->chunkserver_id[1] = (c->chunkserver_id[0] + (secondary_count))%NUM_CHUNKSERVERS;
+					pthread_mutex_lock(&seq_mutex);
+					secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
+					pthread_mutex_unlock(&seq_mutex);
+
+					c->last_read = 1;
+
+					/* Enter into hashtable */
+					e.data = c;
+					((file_info*)ep->data)->num_of_chunks++;
+					hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
+
+					retval = 0;
 				}
-				
-				strcpy(c->chunk_handle,itoa(chunk_id));
-				//TODO: what to do if a chunkserver is down
-				e.key = itoa(((file_info*)ep->data)->num_of_chunks);
-				c->chunkserver_id[0] = chunk_id%NUM_CHUNKSERVERS;
-				c->chunkserver_id[1] = (c->chunkserver_id[0] + (secondary_count))%NUM_CHUNKSERVERS;
-				secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
-				e.data = c;
-				((file_info*)ep->data)->num_of_chunks++;
-				hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
-				//TODO: build response structure for client
-				//Send a message to client
+
 			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			sendmsg(soc, msg, 0);
+			dfsmsg->msg_type = WRITE_RESP;
 			break;
 
 	}
