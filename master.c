@@ -313,9 +313,13 @@ void* handle_client_request(void *arg)
 				retval = -ENOENT;
 			/* File found */
 			} else {
-				memcpy(msg->msg_iov[1].iov_base, &((file_info*)ep->data)->filestat, sizeof(struct stat)); 
-				msg->msg_iov[1].iov_len = sizeof(struct stat);
-				printf("chunksz = %d\n", ((struct stat*)msg->msg_iov[1].iov_base)->st_blksize);	
+				char str[100];
+				sprintf(str,"%lu %lu %llu %llu %llu ", ((file_info*)ep->data)->filestat.st_ino, ((file_info*)ep->data)->filestat.st_size,
+					((file_info*)ep->data)->filestat.st_atime, ((file_info*)ep->data)->filestat.st_mtime,
+					((file_info*)ep->data)->filestat.st_ctime);
+				msg->msg_iov[1].iov_base = str; 
+				msg->msg_iov[1].iov_len = 100;
+				printf("ino size mtime atime ctime = %s\n", (char*)msg->msg_iov[1].iov_base);	
 				retval = 0;
 			}
 

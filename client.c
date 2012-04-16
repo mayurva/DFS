@@ -18,6 +18,7 @@ pthread_mutex_t seq_mutex;
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
+	struct timeval tv;
 	char * buf = (char*) malloc (MAX_BUF_SZ);
 	strcpy(buf, path);
 	prepare_msg(GETATTR_REQ, &msg, buf, MAX_BUF_SZ);
@@ -60,30 +61,50 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	#endif
 		return dfsmsg->status;
 	}
-	//copy the data into stbuf (if required)
-	stbuf = (struct stat*) msg->msg_iov[1].iov_base;
-	memcpy(stbuf, (struct stat*) msg->msg_iov[1].iov_base, sizeof(struct stat));
+	/* TODO : Only size is received from master right now */
+	char *str = msg->msg_iov[1].iov_base;
 	#ifdef DEBUG
-		printf("%s: Getattr status is - %d size = %d size = %d\n",__func__, dfsmsg->status, stbuf->st_blksize, ((struct stat*) msg->msg_iov[1].iov_base)->st_blksize);
+		printf("%s: Getattr str - %s\n",__func__, str);
+	#endif
+	char ino[10], size[10], mtime[20], atime[20], ctime[20];
+	int i = 0, j = 0;
+	while (str[i] != ' ') {
+		ino[j++] = str[i++];
+	}
+	ino[j] = '\0';
+	i++;
+	j = 0;
+	while (str[i] != ' ') {
+		size[j++] = str[i++];
+	}
+	size[j] = '\0';
+	i++;
+	j = 0;
+	while (str[i] != ' ') {
+		mtime[j++] = str[i++];
+	}
+	mtime[j] = '\0';
+	i++;
+	j = 0;
+	while (str[i] != ' ') {
+		atime[j++] = str[i++];
+	}
+	atime[j] = '\0';
+	i++;
+	j = 0;
+	while (str[i] != ' ') {
+		ctime[j++] = str[i++];
+	}
+	ctime[j] = '\0';
+	lstat("./client.c", stbuf);
+	stbuf->st_ino = atol(ino);	
+	stbuf->st_size = atol(size);
+
+	#ifdef DEBUG
+		printf("%s: Getattr status is - %d ino = %llu file size = %llu mtime = %lld atime = %lld ctime = %lld %d\n",__func__
+			, dfsmsg->status, stbuf->st_ino, stbuf->st_size, stbuf->st_mtime, stbuf->st_atime, stbuf->st_ctime, stbuf->st_mode);
 	#endif
 	return 0;
-/*	
-_//client side code goes here
-
-	stbuf->st_dev = temp_stbuf.st_dev;
-	stbuf->st_ino = temp_stbuf.st_ino;
-	stbuf->st_mode = temp_stbuf.st_mode;
-	stbuf->st_nlink = temp_stbuf.st_nlink;
-	stbuf->st_uid = temp_stbuf.st_uid;
-	stbuf->st_gid = temp_stbuf.st_gid;
-	stbuf->st_rdev = temp_stbuf.st_rdev;
-	stbuf->st_size = temp_stbuf.st_size;
-	stbuf->st_blksize = temp_stbuf.st_blksize;
-	stbuf->st_blocks = temp_stbuf.st_blocks;
-	stbuf->st_atime = temp_stbuf.st_atime;
-	stbuf->st_mtime = temp_stbuf.st_mtime;
-	stbuf->st_ctime = temp_stbuf.st_ctime;
-*/
 }
 
 static int gfs_mkdir(const char *path, mode_t mode)
