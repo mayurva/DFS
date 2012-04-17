@@ -2,7 +2,7 @@ INC = chunkserver.h client.h master.h dfs.h
 OBJ = chunkserver.o master.o tcp_utils.o
 SRC = chunkserver.c master.c tcp_utils.c
 OUT = chunkserver client master 
-CC = cc
+CC = cc -g
 
 FLAGS = `pkg-config fuse --cflags --libs`
 

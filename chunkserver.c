@@ -9,7 +9,7 @@
 #include<pthread.h>
 #include<errno.h>
 
-#define MAX_DATA_SZ 1000
+#define MAX_DATA_SZ (2 * 1024)
 
 char *chunk_path;
 host chunkserver;
@@ -17,6 +17,9 @@ host master;
 int heartbeat_port;
 int client_listen_socket,master_socket;
 pthread_mutex_t	seq_mutex;
+#define MAX_THR 100
+pthread_t       threads[MAX_THR];
+int thr_id = 0;
 
 int chunkserver_init(int argc, char *argv[])
 {
@@ -132,17 +135,37 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	strcpy(path, chunk_path);
 	strcat(path, req->chunk_handle);
 
+	#ifdef DEBUG
+	printf("opening chunk for read- %s\n", path);
+	#endif
 	FILE * chunk_fd = fopen(path, "r");
 	if (chunk_fd == NULL) {
+	#ifdef DEBUG
 		printf("cannot open chunk file for reading - %s\n", path);
+	#endif
 		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("opened chunk file for read - %s\n", path);
+	#endif
 	}
 
 	size_t retval = fread(resp->chunk, CHUNK_SIZE, 1, chunk_fd);
-	if (retval != CHUNK_SIZE) {
-		printf("failure: only %d bytes written\n", retval );
+	if (retval != 1) {
+	#ifdef DEBUG
+		printf("failure: chunkfile not read\n");
+	#endif
                 return -1;
-        } 
+	} else {
+	#ifdef DEBUG
+		printf("Read chunkfile- %s\n", path);
+		int i;
+		for (i = 0; i < CHUNK_SIZE; i++)
+			printf("%c", resp->chunk[i]);
+		printf("\n");
+	#endif
+	}
+	return 0; 
 }
 
 
@@ -152,18 +175,42 @@ int chunk_write(write_data_req *req)
 	
 	strcpy(path, chunk_path);
 	strcat(path, req->chunk_handle);
+	#ifdef DEBUG
+	printf("creating chunk for write - %s\n", path);
+	#endif
 
 	FILE * chunk_fd = fopen(path, "w+");
 	if (chunk_fd == NULL) {
+	#ifdef DEBUG
 		printf("cannot open chunk file for writing - %s\n", path);
+	#endif
 		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("opened chunk file for write- %s\n", path);
+	#endif
 	}
+	
+	#ifdef DEBUG
+	int i;
+	for (i = 0; i < CHUNK_SIZE; i++)
+		printf("%c", req->chunk[i]);
+	printf("\n");
+	#endif
 
 	size_t retval = fwrite(req->chunk, CHUNK_SIZE, 1, chunk_fd);
-	if (retval != CHUNK_SIZE) {
-		printf("failure: only %d bytes written\n", retval );
+	fclose(chunk_fd);
+	if (retval != 1) {
+	#ifdef DEBUG
+		printf("failure: write incomplete\n");
+	#endif
                 return -1;
-        } 
+	} else {
+	#ifdef DEBUG
+		printf("Written chunkfile successfully- %s\n", path);
+	#endif
+	}
+	return 0; 
 }
 
 void* handle_client_request(void *arg)
@@ -173,18 +220,18 @@ void* handle_client_request(void *arg)
         char * data = (char *) malloc(MAX_DATA_SZ);
         prepare_msg(0, &msg, data, MAX_DATA_SZ);
 	read_data_resp * resp;
+	dfs_msg *dfsmsg;
 
         int retval = recvmsg(soc, msg, 0);
 	if (retval == -1) {
 		printf("failed to receive message from client - errno-%d\n", errno);
 	} else {
+		dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;
 		#ifdef DEBUG
-        	printf("received message from client\n");
+        	printf("received message from client - %d\n", dfsmsg->msg_type);
 		#endif
 	}
 
-        dfs_msg *dfsmsg;
-        dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;
 
         //extract the message type
         print_msg(dfsmsg);
@@ -205,7 +252,7 @@ void* handle_client_request(void *arg)
 				printf("failed to send read reply to client - errno-%d\n", errno);
 			} else {
 				#ifdef DEBUG
-				printf("received message from client\n");
+				printf("sent read reply to client\n");
 				#endif
 			}
 			break;
@@ -213,14 +260,12 @@ void* handle_client_request(void *arg)
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
 			dfsmsg->msg_type = WRITE_DATA_RESP; 
-			msg->msg_iov[1].iov_base = NULL;
-			msg->msg_iov[1].iov_len = 0;
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {
 				printf("failed to send write reply to client - errno-%d\n", errno);
 			} else {
 				#ifdef DEBUG
-				printf("received message from client\n");
+				printf("sent write reply to client\n");
 				#endif
 			}
 			break;
@@ -248,12 +293,12 @@ void* listenClient(void* ptr)
 		#ifdef DEBUG
 			printf("connected to client\n");
 		#endif
-		recvmsg(soc, msg, 0);
-		#ifdef DEBUG
-			printf("received message from client\n");
-		#endif
-		//extract the message type
-		//and reply to client appropriately
+                if (thr_id == MAX_THR) {
+                        thr_id = 0;
+                }
+                if((pthread_create(&threads[thr_id++], NULL, handle_client_request, (void*)soc)) != 0) {
+                        printf("%s: Failed to create thread to handle client requests %d\n", __func__, thr_id);
+                }
 	}
 }
 
@@ -276,7 +321,7 @@ void* listenMaster(void* ptr)
 			sprintf(buf, "Failed to receive heartbeat from master - %d\n", errno);
 			write(1, buf, strlen(buf));
 		} else {	
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			sprintf(buf, "\nreceived heartbeat message-%d from master\n", ++id);
 			write(1, buf, strlen(buf));
 		#endif
@@ -287,7 +332,7 @@ void* listenMaster(void* ptr)
 			sprintf(buf, "Failed to send heartbeat ACK to master - %d\n", errno);
 			write(1, buf, strlen(buf));
 		} else {	
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			sprintf(buf, "Sent heartbeat ACK-%d to master\n", id);
 			write(1, buf, strlen(buf));
 		#endif

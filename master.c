@@ -243,7 +243,19 @@ void* handle_client_request(void *arg)
 					/* Create new object for thus file */
 					file_info *new_file = (file_info*)malloc(sizeof(file_info));
 					/* Initialize hash table for chunks of this file */
-					hcreate_r(10,new_file->chunk_list);
+					new_file->chunk_list = (struct hsearch_data*)calloc(1, sizeof(struct hsearch_data));
+					if (new_file->chunk_list == NULL) {
+						printf("%s : Not enough memory\n", __func__);
+						retval = -1;
+						break;
+					}
+					int retval = hcreate_r(10,new_file->chunk_list);
+					if (retval == 0) {
+						printf("%s : Failed to create master hashtable\n", __func__);
+						retval = -1;
+						break;
+					}
+
 					/* Initialize file stats */
 					new_file->filestat.st_dev = 0;
 					pthread_mutex_lock(&seq_mutex);
@@ -313,13 +325,11 @@ void* handle_client_request(void *arg)
 				retval = -ENOENT;
 			/* File found */
 			} else {
-				char str[100];
-				sprintf(str,"%lu %lu %llu %llu %llu ", ((file_info*)ep->data)->filestat.st_ino, ((file_info*)ep->data)->filestat.st_size,
-					((file_info*)ep->data)->filestat.st_atime, ((file_info*)ep->data)->filestat.st_mtime,
-					((file_info*)ep->data)->filestat.st_ctime);
+				char str[200];
+				sprintf(str,"%lu %lu ", ((file_info*)ep->data)->filestat.st_ino, ((file_info*)ep->data)->filestat.st_size);
 				msg->msg_iov[1].iov_base = str; 
-				msg->msg_iov[1].iov_len = 100;
-				printf("ino size mtime atime ctime = %s\n", (char*)msg->msg_iov[1].iov_base);	
+				msg->msg_iov[1].iov_len = 200;
+				printf("ino size = %s\n", (char*)msg->msg_iov[1].iov_base);	
 				retval = 0;
 			}
 
@@ -351,9 +361,10 @@ void* handle_client_request(void *arg)
 			/* File found */
 			} else {
 				/* TODO : check if the read size of within the chunk size.. current size variable must be maintained within chunk_info */
-				if(((file_info*)ep->data)->num_of_chunks > read_req_obj->chunk_index){
+				if(((file_info*)ep->data)->num_of_chunks <= read_req_obj->chunk_index){
 					#ifdef DEBUG
-					printf("Read error - file does not exist\n");
+					printf("Read error - no data available - no. of chunks = %d requested index = %d\n",
+					((file_info*)ep->data)->num_of_chunks, read_req_obj->chunk_index);
 					#endif
 					retval = -ENOENT;
 				} else {
@@ -371,7 +382,7 @@ void* handle_client_request(void *arg)
 						retval = -ENODATA;
 					/* Chunk found in hashtable */
 					} else {
-						read_resp * resp = (read_resp*) malloc(sizeof(read_req));
+						read_resp * resp = (read_resp*) malloc(sizeof(read_resp));
 						chunk_info *c = (chunk_info*)ep_temp->data;
 						c->last_read = (c->last_read + 1) % 2;	
 						/* Prepare response */
@@ -419,9 +430,9 @@ void* handle_client_request(void *arg)
 
 					/* Prepare chunk object */	
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
-					sprintf(c->chunk_handle, "%d", read_req_obj->chunk_index);
+					sprintf(c->chunk_handle, "%d", chunk_id);
 					char temp[10];
-					sprintf(temp, "%d", ((file_info*)ep->data)->num_of_chunks);
+					sprintf(temp, "%d", write_req_obj->chunk_index);
 					e.key = temp;
 
 					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
@@ -443,7 +454,18 @@ void* handle_client_request(void *arg)
 					/* Enter into hashtable */
 					e.data = c;
 					((file_info*)ep->data)->num_of_chunks++;
+					((file_info*)ep->data)->filestat.st_size += CHUNK_SIZE;
 					hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
+
+					/* Prepare response */
+					write_resp * resp = (write_resp*) malloc(sizeof(write_resp));
+					strcpy(resp->ip_address_primary, chunk_servers[c->chunkserver_id[0]].ip_addr);
+					resp->port_primary = chunk_servers[c->chunkserver_id[0]].client_port;
+					strcpy(resp->ip_address_secondary, chunk_servers[c->chunkserver_id[1]].ip_addr);
+					resp->port_secondary = chunk_servers[c->chunkserver_id[1]].client_port;
+					strcpy(resp->chunk_handle, c->chunk_handle);
+					msg->msg_iov[1].iov_base = resp;
+					msg->msg_iov[1].iov_len = sizeof(write_resp);
 
 					retval = 0;
 				}
@@ -499,7 +521,7 @@ void* heartbeat_thread(void* ptr)
 
 	while(1) {
 
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
 			write(1, buf, strlen(buf));
 		#endif
@@ -513,7 +535,7 @@ void* heartbeat_thread(void* ptr)
 			write(1, buf, strlen(buf));
 			break;
 		} else {
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
 			write(1, buf, strlen(buf));
 		#endif
@@ -528,7 +550,7 @@ void* heartbeat_thread(void* ptr)
 			write(1, buf, strlen(buf));
 			break;
 		} else {
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
 			write(1, buf, strlen(buf));
 		#endif

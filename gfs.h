@@ -98,16 +98,16 @@ typedef struct write_req_ {
 
 typedef struct write_resp_ {
 	/* For now, write full chunk, just validate that the new chunk is the last chunk */
-	char	ip_address_primary[20];
-	int 	port_primary;
-	char	ip_address_secondary[20];
-	int 	port_secondary;
+	char	ip_address_primary[64];
+	char	ip_address_secondary[64];
 	char	chunk_handle[64];
+	int 	port_primary;
+	int 	port_secondary;
 }write_resp;
 
 typedef struct write_data_req_ {
-	char	chunk_handle[64];
 	char	chunk[CHUNK_SIZE];
+	char	chunk_handle[64];
 	/* For now, write full chunk, just validate that the new chunk is the last chunk */
 }write_data_req;	
 

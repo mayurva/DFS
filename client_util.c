@@ -40,7 +40,7 @@ int create_write_req(write_req *ptr,char *path, int chunk_index)
 	return 0;
 }
 
-int create_write_data_req(write_data_req *ptr,char *path, char *chunk_handle,char *buf)
+int create_write_data_req(write_data_req *ptr, char *chunk_handle,char *buf)
 {
 	strcpy(ptr->chunk_handle,chunk_handle);
 	memcpy(ptr->chunk,buf,CHUNK_SIZE);

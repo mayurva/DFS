@@ -7,7 +7,7 @@
 int read_file(char *filename)
 {
 	FILE *fd;
-	char *ptr = (char*)malloc(CHUNK_SIZE+1);
+	char *ptr = (char*)malloc(CHUNK_SIZE);
 	int n;
 	if((fd = fopen(filename,"r+"))==NULL){
 		printf("Error opening file\n");
@@ -16,13 +16,17 @@ int read_file(char *filename)
 	printf("Enter which block to be read: ");
 	scanf("%d",&n);
 	//Read the nth block if exists throw error if not...	
-	fseek(fd,(n-1)*CHUNK_SIZE,SEEK_SET);
+	//fseek(fd, (n-1)*CHUNK_SIZE, SEEK_SET);
 	if(fread(ptr,CHUNK_SIZE,1,fd) == 0){
 		printf("Read failure\n");
 		fclose(fd);
 		return -1;
 	}
-	printf("Data is\n%s\n",ptr);
+
+	int i;
+	for(i=0; i<CHUNK_SIZE;i++) {
+		printf("%c", ptr[i]);
+	}
 	fclose(fd);
 	return 0;
 } 

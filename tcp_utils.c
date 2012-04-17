@@ -229,7 +229,6 @@ void prepare_msg(int msg_type, struct msghdr **msg, void * data_ptr, int data_le
 
 void free_msg(struct msghdr *msg)
 {
-        free(((dfs_msg*)msg->msg_iov[0].iov_base)->data);
         free(msg->msg_iov[0].iov_base);
         free(msg->msg_iov);
         free(msg);
