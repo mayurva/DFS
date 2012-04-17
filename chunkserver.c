@@ -9,7 +9,6 @@
 #include<pthread.h>
 #include<errno.h>
 
-#define MAX_DATA_SZ (2 * 1024)
 
 char *chunk_path;
 host chunkserver;
@@ -217,8 +216,8 @@ void* handle_client_request(void *arg)
 {	
         struct msghdr *msg;
         int soc = (int)arg;
-        char * data = (char *) malloc(MAX_DATA_SZ);
-        prepare_msg(0, &msg, data, MAX_DATA_SZ);
+        char * data = (char *) malloc(MAX_BUF_SZ);
+        prepare_msg(0, &msg, data, MAX_BUF_SZ);
 	read_data_resp * resp;
 	dfs_msg *dfsmsg;
 
@@ -277,8 +276,8 @@ void* listenClient(void* ptr)
 {
 	int soc;
         struct msghdr *msg;
-        char * data = (char *) malloc(MAX_DATA_SZ);
-        prepare_msg(0, &msg, data, MAX_DATA_SZ);
+        char * data = (char *) malloc(MAX_BUF_SZ);
+        prepare_msg(0, &msg, data, MAX_BUF_SZ);
 
 	#ifdef DEBUG
 		printf("this thread listens connection requests from clients\n");

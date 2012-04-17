@@ -18,7 +18,6 @@
 
 #define DEBUG
 
-#define  MAX_DATA_SZ (2 * 1024)
 
 struct hsearch_data *file_list;
 host master;
@@ -204,8 +203,8 @@ void* handle_client_request(void *arg)
 	write_req *write_req_obj;
 	read_req *read_req_obj;
 
-	char * data = (char *) malloc(MAX_DATA_SZ);
-	prepare_msg(0, &msg, data, MAX_DATA_SZ);
+	char * data = (char *) malloc(MAX_BUF_SZ);
+	prepare_msg(0, &msg, data, MAX_BUF_SZ);
 	recvmsg(soc, msg, 0);
 
 	dfs_msg *dfsmsg;
@@ -213,8 +212,6 @@ void* handle_client_request(void *arg)
 	#ifdef DEBUG
 	printf("received message from client\n");
 	#endif
-	//extract the message type
-	//print_msg(dfsmsg);
 	
 	switch (dfsmsg->msg_type) {
 
@@ -222,6 +219,7 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received create request from client\n");
 			#endif
+			free_msg(msg);
 			break;
 
 		case OPEN_REQ:
@@ -285,17 +283,24 @@ void* handle_client_request(void *arg)
 					#ifdef DEBUG	
 						printf("File not found at master\n");
 					#endif
-					retval = 0;
+					retval = -1;
 				}
 
 			/* File exists */
 			} else {
 				/* File to be created already exists - failure */
 				if(open_req_obj->flags & O_CREAT){
-					#ifdef DEBUG	
-					printf("File already present\n");
-					#endif
-					retval = -1;
+					if ((open_req_obj->flags & O_RDONLY) || (open_req_obj->flags & O_RDWR) || (open_req_obj->flags & O_APPEND)) {
+						#ifdef DEBUG	
+						printf("File opened for read/write\n");
+						#endif
+						retval = 0;
+					} else {
+						#ifdef DEBUG	
+						printf("File already present\n");
+						#endif
+						retval = -1;
+					}
 				/* File to to opened is found at master - success */
 				} else {
 					retval = 0;
@@ -306,6 +311,7 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = OPEN_RESP;
 			sendmsg(soc, msg, 0);
+			free_msg(msg);
 			break;
 
 		case GETATTR_REQ:
@@ -337,12 +343,14 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = GETATTR_RESP;
 			sendmsg(soc, msg, 0);
+			free_msg(msg);
 			break;
 
 		case READDIR_REQ:
 			#ifdef DEBUG
 			printf("received readdir request from client\n");
 			#endif
+			free_msg(msg);
 			break;
 
 		case READ_REQ:
@@ -401,6 +409,7 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = READ_RESP;
 			sendmsg(soc, msg, 0);
+			free_msg(msg);
 			break;
 
 		case WRITE_REQ:
@@ -476,6 +485,7 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			sendmsg(soc, msg, 0);
 			dfsmsg->msg_type = WRITE_RESP;
+			free_msg(msg);
 			break;
 
 	}

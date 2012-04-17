@@ -6,6 +6,7 @@
 #define CHUNK_SIZE 	(1024)
 #define MAX_CLIENTS 10
 
+#define MAX_BUF_SZ (2 * 1024)
 #include<sys/types.h>
 #include<sys/socket.h>
 
