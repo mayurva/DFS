@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include<string.h>
 #define MAX_LENGTH 100
-#define CHUNK_SIZE 1024
+#define CHUNK_SIZE (1024)
 
 int read_file(char *filename)
 {

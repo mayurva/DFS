@@ -11,7 +11,7 @@
 #include<sys/socket.h>
 
 typedef struct host_{
-	char ip_addr[20];
+	char ip_addr[128];
 	int port;
 }host;
 
@@ -107,8 +107,8 @@ typedef struct write_resp_ {
 }write_resp;
 
 typedef struct write_data_req_ {
-	char	chunk[CHUNK_SIZE];
-	char	chunk_handle[64];
+	char	chunk[CHUNK_SIZE+64];
+//	char	chunk_handle[64];
 	/* For now, write full chunk, just validate that the new chunk is the last chunk */
 }write_data_req;	
 

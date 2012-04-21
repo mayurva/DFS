@@ -18,6 +18,14 @@
 
 #define DEBUG
 
+int failover_array[6][3]={	{0,2,3},	//0,1
+				{0,1,3},	//0,2
+				{0,1,2},	//0,3
+				{0,0,3},	//1,2
+				{0,0,2},	//1,3
+				{0,0,1}		//2,3
+			};
+
 
 struct hsearch_data *file_list;
 host master;
@@ -34,8 +42,46 @@ pthread_mutex_t seq_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
 
+int add_tochunklist(int cid,int other_id, char* chunk_handle)
+{
+	chunklist_node *ptr = (chunklist_node*)malloc(sizeof(chunklist_node));
+	if(ptr == NULL){
+		return -1;
+	}
+	strcpy(ptr->chunk_handle,chunk_handle);
+	ptr->other_cs = other_id;
+	ptr->moved_cs = -1;
+	ptr->next = NULL;
+	if(chunk_servers[cid].head == NULL){
+		chunk_servers[cid].head = chunk_servers[cid].tail = ptr;
+	} else {
+		chunk_servers[cid].tail->next = ptr;
+		chunk_servers[cid].tail = chunk_servers[cid].tail->next;		
+	}
+	return 0;
+}
 
-int master_init(char *master_ip)
+void re_replicate(int index)
+{
+	int new_cs;
+	chunklist_node *ptr = chunk_servers[index].head;	
+	if(ptr==NULL)	return;
+	while(ptr->next){
+		chunklist_node *ptr1 = (chunklist_node*)malloc(sizeof(chunklist_node));
+		strcpy(ptr1->chunk_handle,ptr->chunk_handle);
+		ptr1->other_cs = ptr->other_cs;
+		new_cs = failover_array[index + ptr->other_cs + !index][failover_array[index + ptr->other_cs + !index][0]+1];
+		failover_array[index + ptr->other_cs + !index][0] = !failover_array[index + ptr->other_cs + !index][0];	
+		ptr->moved_cs = new_cs;
+		ptr1->moved_cs = -1;
+		//e.key = ptr1->chunk_handle;
+		//find the chunk and update the new chunk server
+		//read a block from chunk server
+		//write the block to other chunk server
+	}
+}
+
+int master_init()
 {
 	char *hostname;
 	int len;
@@ -72,7 +118,8 @@ int master_init(char *master_ip)
 
 
 	/* Set master ip address */
-	strcpy(master.ip_addr, master_ip);	
+	//strcpy(master.ip_addr, master_ip);	
+	getSelfIp(&master);
 	#ifdef DEBUG
 		printf("ip address is %s\n",master.ip_addr);
 	#endif
@@ -109,13 +156,13 @@ int main(int argc, char *argv[])
 	int retval;
 	pthread_t client_listen_thread, chunkserver_listen_thread;
 
-	if (argc != 2) {
+/*	if (argc != 2) {
 		printf("run as : ./master <master-ip-address>\n");
 		return 0;
-	}
+	}*/
 
 	/* Initialize master */
-	retval = master_init(argv[1]);
+	retval = master_init();
 	if (retval == -1) {
 		printf("%s : Failed to initialize master\n", __func__);
 		return -1;
@@ -170,6 +217,7 @@ void* connect_chunkserver_thread(void* ptr)
 		if((j = find_chunkserver(h)) != -1  ) {	
 			chunk_servers[j].conn_socket = soc;
 			chunk_servers[j].is_up = 1;
+			chunk_servers[j].head = chunk_servers[j].tail = NULL;
 			#ifdef DEBUG
 				printf("Chunkserver %d joined %d\n",j, soc);
 			#endif
@@ -193,6 +241,7 @@ void* connect_chunkserver_thread(void* ptr)
 
 void* handle_client_request(void *arg)
 {
+	FILE *filelist;
 	struct msghdr *msg;
 	int soc  = (int)arg;
 	ENTRY e,*ep,*ep_temp;
@@ -224,7 +273,7 @@ void* handle_client_request(void *arg)
 
 		case OPEN_REQ:
 			#ifdef DEBUG
-				printf("received open request from client\n");
+			printf("received open request from client\n");
 			#endif
 			open_req_obj = (open_req*) msg->msg_iov[1].iov_base;
 			e.key = open_req_obj->path;
@@ -249,7 +298,7 @@ void* handle_client_request(void *arg)
 					}
 					int retval = hcreate_r(10,new_file->chunk_list);
 					if (retval == 0) {
-						printf("%s : Failed to create master hashtable\n", __func__);
+						printf("%s : Failed to create file hashtable\n", __func__);
 						retval = -1;
 						break;
 					}
@@ -276,7 +325,13 @@ void* handle_client_request(void *arg)
 						printf("Error creating file %s\n",open_req_obj->path);
 						retval = -1;
 					} else {
+						filelist = fopen(".filelist","ab+");
+						fwrite(new_file,sizeof(file_info),1,filelist);
+						#ifdef DEBUG
+							printf("written to file list\n");
+						#endif
 						retval = 0;			
+						fclose(filelist);
 					}
 				/* File is being opened */
 				} else {
@@ -438,6 +493,9 @@ void* handle_client_request(void *arg)
 				} else {
 
 					/* Prepare chunk object */	
+					pthread_mutex_lock(&seq_mutex);
+					chunk_id++;
+					pthread_mutex_unlock(&seq_mutex);
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
 					sprintf(c->chunk_handle, "%d", chunk_id);
 					char temp[10];
@@ -447,18 +505,16 @@ void* handle_client_request(void *arg)
 					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
 
 					/* Assign primary chunkserver */
-					c->chunkserver_id[0] = chunk_id % NUM_CHUNKSERVERS;
-					pthread_mutex_lock(&seq_mutex);
-					chunk_id++;
-					pthread_mutex_unlock(&seq_mutex);
+					c->chunkserver_id[0] = chunk_id % NUM_CHUNKSERVERS;				
 
 					/* Assign secondary chunkserver */
 					c->chunkserver_id[1] = (c->chunkserver_id[0] + (secondary_count))%NUM_CHUNKSERVERS;
 					pthread_mutex_lock(&seq_mutex);
 					secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
 					pthread_mutex_unlock(&seq_mutex);
-
 					c->last_read = 1;
+					add_tochunklist(c->chunkserver_id[0],c->chunkserver_id[1],c->chunk_handle);
+					add_tochunklist(c->chunkserver_id[1],c->chunkserver_id[0],c->chunk_handle);
 
 					/* Enter into hashtable */
 					e.data = c;
@@ -540,7 +596,7 @@ void* heartbeat_thread(void* ptr)
 		//retval = send(chunk_servers[index].conn_socket, "Hi", 3, 0);
 		if (retval == -1) {
 			chunk_servers[index].is_up = 0;
-			// TODO : handle failure of chunkserver by re-replication
+			re_replicate(index);
 			sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
 			write(1, buf, strlen(buf));
 			break;
@@ -555,7 +611,7 @@ void* heartbeat_thread(void* ptr)
 		retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
 		if (retval == -1) {
 			chunk_servers[index].is_up = 0;
-			// TODO : handle failure of chunkserver by re-replication
+			re_replicate(index);
 			sprintf(buf, "Chunkserver-%d is down\n",index);
 			write(1, buf, strlen(buf));
 			break;

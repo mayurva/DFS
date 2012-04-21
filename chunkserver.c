@@ -48,13 +48,14 @@ int chunkserver_init(int argc, char *argv[])
 	#endif
 
 	/* Set ip addr of chunkserver */
-	strcpy(chunkserver.ip_addr, argv[4]);
+//	strcpy(chunkserver.ip_addr, argv[4]);
+	getSelfIp(&chunkserver);
 	#ifdef DEBUG
 		printf("Chunkserver ip address = %s\n", chunkserver.ip_addr);
 	#endif
 
 	/* Set client port of chunkserver */
-	chunkserver.port = atoi(argv[5]);	
+	chunkserver.port = atoi(argv[4]);	
 	#ifdef DEBUG
 		printf("Chunkserver client port is %d\n", chunkserver.port);
 	#endif
@@ -96,9 +97,9 @@ int main(int argc, char * argv[])
 {
 	pthread_t client_listen_thread, master_listen_thread, heartbeat_thread;
 
-	if(argc != 6){
+	if(argc != 5){
 		printf("%s: Incorrect command line arguments\n",__func__);
-		printf("Usage: ./chunkserver <path> <master_ip> <heartbeat_port> <chunkserver_ip> <client_listen_port>\n");
+		printf("Usage: ./chunkserver <path> <master_ip> <heartbeat_port> <client_listen_port>\n");
 		exit(-1);
 	}
 
@@ -172,8 +173,11 @@ int chunk_write(write_data_req *req)
 {
 	char	path[256];
 	
+	#ifdef DEBUG
+	printf("chunk handle - %s\n", &(req->chunk[CHUNK_SIZE]));
+	#endif
 	strcpy(path, chunk_path);
-	strcat(path, req->chunk_handle);
+	strcat(path, &(req->chunk[CHUNK_SIZE]));
 	#ifdef DEBUG
 	printf("creating chunk for write - %s\n", path);
 	#endif
@@ -258,6 +262,7 @@ void* handle_client_request(void *arg)
 
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
+			printf("input path is %s\n",msg->msg_iov[1].iov_base);
 			dfsmsg->msg_type = WRITE_DATA_RESP; 
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {

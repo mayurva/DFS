@@ -405,12 +405,13 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 
 		/* Prepare write data request */
 		write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
-		create_write_data_req(data_ptr,chunk_handle,buf+(i-start_block)*CHUNK_SIZE);
+		create_write_data_req(data_ptr,resp->chunk_handle,buf+(i-start_block)*CHUNK_SIZE);
 		#ifdef DEBUG
 		int i;
 		printf("Data to be written is - \n");
-		for (i = 0; i < CHUNK_SIZE; i++) 
+		for (i = 0; i < CHUNK_SIZE+64; i++) 
 			printf("%c", data_ptr->chunk[i]);
+//		printf("\nhandle - %s\n", data_ptr->chunk+CHUNK_SIZE);
 		printf("\n");
 		#endif
 		free_msg(msg);

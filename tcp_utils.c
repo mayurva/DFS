@@ -94,6 +94,69 @@ int getRandom(int lower,int upper)
 	return ((rand()%(upper-lower))+lower);
 }
 
+void getSelfIp(host *si)
+{
+
+	struct ifaddrs *myaddrs, *ifa;
+	void *in_addr;
+	char iface_name[100];
+	char buf[64], intf[128];
+
+	strcpy(iface_name, "");
+
+	if(getifaddrs(&myaddrs) != 0) {
+		printf("getifaddrs failed! \n");
+		exit(-1);
+	}
+
+	for (ifa = myaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+
+		if (ifa->ifa_addr == NULL)
+			continue;
+
+		if (!(ifa->ifa_flags & IFF_UP))
+			continue;
+
+		switch (ifa->ifa_addr->sa_family) {
+        
+			case AF_INET: { 
+				struct sockaddr_in *s4 = (struct sockaddr_in *)ifa->ifa_addr;
+				in_addr = &s4->sin_addr;
+				break;
+			}
+
+			case AF_INET6: {
+				struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+				in_addr = &s6->sin6_addr;
+				break;
+			}
+
+			default:
+				continue;
+		}
+
+		if (inet_ntop(ifa->ifa_addr->sa_family, in_addr, buf, sizeof(buf))) {
+			if ( ifa->ifa_addr->sa_family == AF_INET && strcmp(ifa->ifa_name, "lo")!=0 ) {
+				#ifdef DEBUG
+					printf("Server is binding to %s interface\n", ifa->ifa_name);
+				#endif
+				sprintf(si->ip_addr, "%s", buf);
+				sprintf(iface_name, "%s", ifa->ifa_name);
+			}
+		}
+	}
+
+	freeifaddrs(myaddrs);
+	
+	if ( strcmp(iface_name, "") == 0 ) {
+		printf("Either no Interface is up or you did not select any interface ..... \nserver Exiting .... \n\n");
+		exit(0);
+	}
+	#ifdef DEBUG
+		printf("\n\nMy public interface and IP is:  %s %s\n\n", iface_name, si->ip_addr);
+	#endif
+}
+
 int populateIp(host *h,char *hostname)
 {
 	struct hostent *lh = gethostbyname(hostname);

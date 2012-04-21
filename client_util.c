@@ -42,11 +42,12 @@ int create_write_req(write_req *ptr,char *path, int chunk_index)
 
 int create_write_data_req(write_data_req *ptr, char *chunk_handle,char *buf)
 {
-	strcpy(ptr->chunk_handle,chunk_handle);
+	//strcpy(ptr->chunk_handle,chunk_handle);
+	printf("chunk handle %s\n",chunk_handle);
 	memcpy(ptr->chunk,buf,CHUNK_SIZE);
+	memcpy(&(ptr->chunk[CHUNK_SIZE]),chunk_handle,64);
 	return 0;
 }
-
 int client_init(int argc,char* argv[])
 {	
 	pthread_mutex_init(&seq_mutex, NULL);
