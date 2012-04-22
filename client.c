@@ -312,16 +312,16 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
         	dfsmsg =  msg->msg_iov[0].iov_base;
 		if(dfsmsg->status == 0) {
 			/* Update number of bytes read */
-			size_read += CHUNK_SIZE;
 			resp = msg->msg_iov[1].iov_base;
-			memcpy(buf, resp->chunk, CHUNK_SIZE); 
+			memcpy(buf+size_read, resp->chunk, CHUNK_SIZE); 
 			#ifdef DEBUG
 			int i;
 			printf("Data read is - \n");
 			for (i = 0; i < CHUNK_SIZE; i++) 
-				printf("%c", buf[i]);
+				printf("%c", buf[i+size_read]);
 			printf("\n");
 			#endif
+			size_read += CHUNK_SIZE;
 		}
 		free(resp);
 		free_msg(msg);

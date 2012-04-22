@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include<string.h>
 #define MAX_LENGTH 100
-#define CHUNK_SIZE (1024)
+#define CHUNK_SIZE (4096)
 
 int read_file(char *filename)
 {
@@ -16,7 +16,7 @@ int read_file(char *filename)
 	printf("Enter which block to be read: ");
 	scanf("%d",&n);
 	//Read the nth block if exists throw error if not...	
-	fseek(fd, (n-1)*CHUNK_SIZE, SEEK_SET);
+	fseek(fd, n*CHUNK_SIZE, SEEK_SET);
 	if(fread(ptr,CHUNK_SIZE,1,fd) == 0){
 		printf("Read failure\n");
 		fclose(fd);

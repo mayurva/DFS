@@ -498,7 +498,7 @@ void* handle_client_request(void *arg)
 					pthread_mutex_unlock(&seq_mutex);
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
 					sprintf(c->chunk_handle, "%d", chunk_id);
-					char temp[10];
+					char *temp = (char*)malloc(10);
 					sprintf(temp, "%d", write_req_obj->chunk_index);
 					e.key = temp;
 
