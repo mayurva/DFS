@@ -18,18 +18,8 @@
 
 #define DEBUG
 
-int failover_array[6][3]={	{0,2,3},	//0,1
-				{0,1,3},	//0,2
-				{0,1,2},	//0,3
-				{0,0,3},	//1,2
-				{0,0,2},	//1,3
-				{0,0,1}		//2,3
-			};
-
-
 struct hsearch_data *file_list;
 host master;
-
 int file_inode =0;
 unsigned chunk_id = 0;
 int secondary_count = 1;
@@ -41,45 +31,6 @@ chunkserver chunk_servers[NUM_CHUNKSERVERS];
 pthread_mutex_t seq_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
-
-int add_tochunklist(int cid,int other_id, char* chunk_handle)
-{
-	chunklist_node *ptr = (chunklist_node*)malloc(sizeof(chunklist_node));
-	if(ptr == NULL){
-		return -1;
-	}
-	strcpy(ptr->chunk_handle,chunk_handle);
-	ptr->other_cs = other_id;
-	ptr->moved_cs = -1;
-	ptr->next = NULL;
-	if(chunk_servers[cid].head == NULL){
-		chunk_servers[cid].head = chunk_servers[cid].tail = ptr;
-	} else {
-		chunk_servers[cid].tail->next = ptr;
-		chunk_servers[cid].tail = chunk_servers[cid].tail->next;		
-	}
-	return 0;
-}
-
-void re_replicate(int index)
-{
-	int new_cs;
-	chunklist_node *ptr = chunk_servers[index].head;	
-	if(ptr==NULL)	return;
-	while(ptr->next){
-		chunklist_node *ptr1 = (chunklist_node*)malloc(sizeof(chunklist_node));
-		strcpy(ptr1->chunk_handle,ptr->chunk_handle);
-		ptr1->other_cs = ptr->other_cs;
-		new_cs = failover_array[index + ptr->other_cs + !index][failover_array[index + ptr->other_cs + !index][0]+1];
-		failover_array[index + ptr->other_cs + !index][0] = !failover_array[index + ptr->other_cs + !index][0];	
-		ptr->moved_cs = new_cs;
-		ptr1->moved_cs = -1;
-		//e.key = ptr1->chunk_handle;
-		//find the chunk and update the new chunk server
-		//read a block from chunk server
-		//write the block to other chunk server
-	}
-}
 
 int master_init()
 {
@@ -498,7 +449,7 @@ void* handle_client_request(void *arg)
 					pthread_mutex_unlock(&seq_mutex);
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
 					sprintf(c->chunk_handle, "%d", chunk_id);
-					char *temp = (char*)malloc(10);
+					char temp[10];
 					sprintf(temp, "%d", write_req_obj->chunk_index);
 					e.key = temp;
 
@@ -513,8 +464,8 @@ void* handle_client_request(void *arg)
 					secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
 					pthread_mutex_unlock(&seq_mutex);
 					c->last_read = 1;
-					add_tochunklist(c->chunkserver_id[0],c->chunkserver_id[1],c->chunk_handle);
-					add_tochunklist(c->chunkserver_id[1],c->chunkserver_id[0],c->chunk_handle);
+					add_tochunklist(c,0);
+					add_tochunklist(c,1);
 
 					/* Enter into hashtable */
 					e.data = c;
