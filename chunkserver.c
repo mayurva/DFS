@@ -262,7 +262,7 @@ void* handle_client_request(void *arg)
 
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
-			printf("input path is %s\n",msg->msg_iov[1].iov_base);
+			printf("input path is %s\n",(char*)(msg->msg_iov[1].iov_base));
 			dfsmsg->msg_type = WRITE_DATA_RESP; 
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {
@@ -309,17 +309,18 @@ void* listenClient(void* ptr)
 void* listenMaster(void* ptr)
 {
 	int soc;
-	struct msghdr *msg;
+//	struct msghdr *msg;
 	int index;
 	int id = 0;
 	char buf[200];
+	//char msg[MAX_BUF_SZ];
 	#ifdef DEBUG
 		printf("This thread receives periodic heartbeat messages from master\n");
 	#endif
 	while(1) {
 		char buf1[10];
-		prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
-		int retval = recvmsg(master_socket, msg, 0);
+		//prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+		int retval = recv(master_socket, &id, sizeof(int), 0);
 		//int retval = recv(master_socket, buf1, 3, 0);
 		if (retval == -1) {
 			sprintf(buf, "Failed to receive heartbeat from master - %d\n", errno);
@@ -331,7 +332,8 @@ void* listenMaster(void* ptr)
 		#endif
 		}
 
-		retval = sendmsg(master_socket, msg, 0);
+		retval = send(master_socket,&id,sizeof(int),0);
+//		retval = sendmsg(master_socket, msg, 0);
 		if (retval == -1) {
 			sprintf(buf, "Failed to send heartbeat ACK to master - %d\n", errno);
 			write(1, buf, strlen(buf));
