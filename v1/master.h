@@ -8,12 +8,14 @@
 #define CLIENT_LISTEN_PORT 5000
 #define CHUNKSERVER_LISTEN_PORT 6000
 #define MAX_THR 100
-#define NUM_CHUNKSERVERS 2
+#define NUM_CHUNKSERVERS 4
+
+struct chunk_info_;
 
 typedef struct chunklist_node_ {
-	char			chunk_handle[64];
 	int			other_cs;
 	int			moved_cs;
+	struct chunk_info_ 	*chunk_ptr;
 	struct chunklist_node_	*next;
 }chunklist_node;
 
@@ -37,9 +39,11 @@ typedef struct chunk_info_ {
 	char	chunk_handle[64];
 	int	chunkserver_id[2];
 	int	last_read;
+	int	chunk_size;
 }chunk_info;
 
 extern int failover_array[6][3];
+extern chunkserver chunk_servers[NUM_CHUNKSERVERS];
 
 void* connect_chunkserver_thread(void*);
 void* client_request_listener(void*);

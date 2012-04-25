@@ -225,6 +225,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 	char chunk_handle[64];
 	dfs_msg *dfsmsg;
 	size_t size_read = 0;
+	int chunk_size, chunk_offset;
 
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size-1)/CHUNK_SIZE;
@@ -249,7 +250,17 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		}
 
 		/* Send metadata request to master */
-		create_read_req(&read_ptr,path,i);
+		if ( i == start_block) {
+			chunk_offset = offset % CHUNK_SIZE;
+		} else {
+			chunk_offset = 0;
+		}
+		if ((size - size_read) > CHUNK_SIZE) {
+			chunk_size = CHUNK_SIZE - chunk_offset;
+		} else {
+			chunk_size = size - size_read - chunk_offset;
+		}
+		create_read_req(&read_ptr,path,i, chunk_offset, chunk_size);
 		prepare_msg(READ_REQ, &msg, &read_ptr, sizeof(read_req));
 		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
@@ -284,7 +295,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 			return -1;
 		}
 		/* Preapare read-data request */
-		create_read_data_req(&data_ptr,chunk_handle);
+		create_read_data_req(&data_ptr,chunk_handle, chunk_offset, chunk_size);
 		free_msg(msg);
 		prepare_msg(READ_DATA_REQ, &msg, &data_ptr, sizeof(read_data_req));
 		print_msg(msg->msg_iov[0].iov_base);
@@ -321,7 +332,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 				printf("%c", buf[i+size_read]);
 			printf("\n");
 			#endif
-			size_read += CHUNK_SIZE;
+			size_read += chunk_size;
 		}
 		free(resp);
 		free_msg(msg);
@@ -347,6 +358,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	size_t write_size = 0;	
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size-1)/CHUNK_SIZE;
+	int chunk_size, chunk_offset;
 
 	for(i=start_block;i<=last_block;i++){
 		if((master_soc = createSocket())==-1){
@@ -360,7 +372,17 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		}
 
 		/* Send metadat request to master */
-		create_write_req(&write_ptr, path, i);
+		if ( i == start_block) {
+			chunk_offset = offset % CHUNK_SIZE;
+		} else {
+			chunk_offset = 0;
+		}
+		if ((size - size_read) > CHUNK_SIZE) {
+			chunk_size = CHUNK_SIZE - chunk_offset;
+		} else {
+			chunk_size = size - size_read - chunk_offset;
+		}
+		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
 		prepare_msg(WRITE_REQ, &msg, &write_ptr, sizeof(write_req));
 		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
@@ -405,7 +427,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 
 		/* Prepare write data request */
 		write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
-		create_write_data_req(data_ptr,resp->chunk_handle,buf+(i-start_block)*CHUNK_SIZE);
+		create_write_data_req(data_ptr, resp->chunk_handle, buf+ write_size, chunk_offset, chunk_size);
 		#ifdef DEBUG
 		int i;
 		printf("Data to be written is - \n");
@@ -493,7 +515,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 			/* TODO : send rollback to secondary chunkserver */
 	                return -1;
 		}
-		write_size += CHUNK_SIZE;
+		write_size += size;
 		close(chunk_soc);
 		free_msg(msg);
 		free(data_ptr);

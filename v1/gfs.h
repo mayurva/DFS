@@ -61,14 +61,16 @@ typedef struct mkdir_req_{
 
 typedef struct open_req_{
 	char    path[MAX_FILENAME];
-	int flags;
+	int 	flags;
 }open_req;
 
 /* Read data structures */
 
 typedef struct read_req_ {
 	char	filename[MAX_FILENAME];
-	int	chunk_index;			
+	int	chunk_index;
+	int	offset;
+	int 	size;
 }read_req;
 
 typedef struct read_resp_ {
@@ -79,6 +81,8 @@ typedef struct read_resp_ {
 
 typedef struct read_data_req_ {
 	char	chunk_handle[64];
+	int	offset;
+	int 	size;
 	/* Always do data tranfer in chunks of 2MB
 	If start offset and end offset do not fall within chunk boundaries
 	Allocate extra 2MB buffers for the first and last chunk 
@@ -94,7 +98,9 @@ typedef struct read_data_resp_ {
 
 typedef struct write_req_ {
 	char	filename[MAX_FILENAME];
-	int	chunk_index;			
+	int	chunk_index;		
+	int 	offset;
+	int	size;	
 }write_req;
 
 typedef struct write_resp_ {
@@ -107,7 +113,9 @@ typedef struct write_resp_ {
 }write_resp;
 
 typedef struct write_data_req_ {
-	char	chunk[CHUNK_SIZE+64];
+	char		chunk[CHUNK_SIZE+64];
+	int		size;
+	int		offset;	
 //	char	chunk_handle[64];
 	/* For now, write full chunk, just validate that the new chunk is the last chunk */
 }write_data_req;	

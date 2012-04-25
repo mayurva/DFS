@@ -135,7 +135,7 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	strcat(path, req->chunk_handle);
 
 	#ifdef DEBUG
-	printf("opening chunk for read- %s\n", path);
+	printf("opening chunk for read- %s req_size = %d req_offset = %d\n", path, req->size, req->offset);
 	#endif
 	FILE * chunk_fd = fopen(path, "r");
 	if (chunk_fd == NULL) {
@@ -149,7 +149,8 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	#endif
 	}
 
-	size_t retval = fread(resp->chunk, CHUNK_SIZE, 1, chunk_fd);
+	fseek(chunk_fd, req->offset, SEEK_SET);
+	size_t retval = fread(resp->chunk, req->size, 1, chunk_fd);
 	if (retval != 1) {
 	#ifdef DEBUG
 		printf("failure: chunkfile not read\n");
@@ -159,7 +160,7 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	#ifdef DEBUG
 		printf("Read chunkfile- %s\n", path);
 		int i;
-		for (i = 0; i < CHUNK_SIZE; i++)
+		for (i = 0; i < req->size; i++)
 			printf("%c", resp->chunk[i]);
 		printf("\n");
 	#endif
@@ -173,7 +174,7 @@ int chunk_write(write_data_req *req)
 	char	path[256];
 	
 	#ifdef DEBUG
-	printf("chunk handle - %s\n", &(req->chunk[CHUNK_SIZE]));
+	printf("opening chunk for write- %s req_size = %d req_offset = %d\n", &(req->chunk[CHUNK_SIZE]), req->size, req->offset);
 	#endif
 	strcpy(path, chunk_path);
 	strcat(path, &(req->chunk[CHUNK_SIZE]));
@@ -195,12 +196,13 @@ int chunk_write(write_data_req *req)
 	
 	#ifdef DEBUG
 	int i;
-	for (i = 0; i < CHUNK_SIZE; i++)
+	for (i = 0; i < req->size; i++)
 		printf("%c", req->chunk[i]);
 	printf("\n");
 	#endif
 
-	size_t retval = fwrite(req->chunk, CHUNK_SIZE, 1, chunk_fd);
+	fseek(chunk_fd, req->offset, SEEK_SET);
+	size_t retval = fwrite(req->chunk, req->size, 1, chunk_fd);
 	fclose(chunk_fd);
 	if (retval != 1) {
 	#ifdef DEBUG
