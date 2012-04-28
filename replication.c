@@ -42,7 +42,7 @@ int write_block(int cs_id,char *chunk_handle,char *chunk_data)
 	write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
         memcpy(data_ptr->chunk,chunk_data,CHUNK_SIZE);
         memcpy(&(data_ptr->chunk[CHUNK_SIZE]),chunk_handle,64);
-	#ifdef DEBUG
+	#ifdef DEBUG1
 		int i;
 		printf("Data to be written is - \n");
 		for (i = 0; i < CHUNK_SIZE+64; i++) 
@@ -176,8 +176,10 @@ void re_replicate(int index)
 		chunklist_node *ptr1 = (chunklist_node*)malloc(sizeof(chunklist_node));
 		ptr1->chunk_ptr = ptr->chunk_ptr;
 		ptr1->other_cs = ptr->other_cs;
-		new_cs = failover_array[index + ptr->other_cs + !index][failover_array[index + ptr->other_cs + !index][0]+1];
-		failover_array[index + ptr->other_cs + !index][0] = !failover_array[index + ptr->other_cs + !index][0];	
+		int diff = index && ptr->other_cs;
+		printf("diff is %d\n",diff);
+		new_cs = failover_array[index + ptr->other_cs - !diff][failover_array[index + ptr->other_cs - !diff][0]+1];
+		failover_array[index + ptr->other_cs - !diff][0] = !failover_array[index + ptr->other_cs - !diff][0];	
 		ptr->moved_cs = new_cs;
 		ptr1->moved_cs = -1;
 	
@@ -187,7 +189,7 @@ void re_replicate(int index)
 
 		printf("before reading\n");
 		read_block(ptr->other_cs,ptr1->chunk_ptr->chunk_handle,&chunk_data);
-		#ifdef DEBUG
+		#ifdef DEBUG1
 			int i;
 			printf("Data read is - \n");
 			for (i = 0; i < CHUNK_SIZE; i++)
