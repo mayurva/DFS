@@ -18,18 +18,8 @@
 
 #define DEBUG
 
-int failover_array[6][3]={	{0,2,3},	//0,1
-				{0,1,3},	//0,2
-				{0,1,2},	//0,3
-				{0,0,3},	//1,2
-				{0,0,2},	//1,3
-				{0,0,1}		//2,3
-			};
-
-
 struct hsearch_data *file_list;
 host master;
-
 int file_inode =0;
 unsigned chunk_id = 0;
 int secondary_count = 1;
@@ -39,47 +29,9 @@ int heartbeat_socket;
 
 chunkserver chunk_servers[NUM_CHUNKSERVERS];
 pthread_mutex_t seq_mutex;
+pthread_mutex_t msg_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
-
-int add_tochunklist(int cid,int other_id, char* chunk_handle)
-{
-	chunklist_node *ptr = (chunklist_node*)malloc(sizeof(chunklist_node));
-	if(ptr == NULL){
-		return -1;
-	}
-	strcpy(ptr->chunk_handle,chunk_handle);
-	ptr->other_cs = other_id;
-	ptr->moved_cs = -1;
-	ptr->next = NULL;
-	if(chunk_servers[cid].head == NULL){
-		chunk_servers[cid].head = chunk_servers[cid].tail = ptr;
-	} else {
-		chunk_servers[cid].tail->next = ptr;
-		chunk_servers[cid].tail = chunk_servers[cid].tail->next;		
-	}
-	return 0;
-}
-
-void re_replicate(int index)
-{
-	int new_cs;
-	chunklist_node *ptr = chunk_servers[index].head;	
-	if(ptr==NULL)	return;
-	while(ptr->next){
-		chunklist_node *ptr1 = (chunklist_node*)malloc(sizeof(chunklist_node));
-		strcpy(ptr1->chunk_handle,ptr->chunk_handle);
-		ptr1->other_cs = ptr->other_cs;
-		new_cs = failover_array[index + ptr->other_cs + !index][failover_array[index + ptr->other_cs + !index][0]+1];
-		failover_array[index + ptr->other_cs + !index][0] = !failover_array[index + ptr->other_cs + !index][0];	
-		ptr->moved_cs = new_cs;
-		ptr1->moved_cs = -1;
-		//e.key = ptr1->chunk_handle;
-		//find the chunk and update the new chunk server
-		//read a block from chunk server
-		//write the block to other chunk server
-	}
-}
 
 int master_init()
 {
@@ -126,6 +78,7 @@ int master_init()
 
 	/* Initialize sequence number mutex */
 	pthread_mutex_init(&seq_mutex, NULL);
+	pthread_mutex_init(&msg_mutex, NULL);
 
 	/* Create, bind and listen socket for client requests */
 	client_request_socket = createSocket();
@@ -445,8 +398,15 @@ void* handle_client_request(void *arg)
 						retval = -ENODATA;
 					/* Chunk found in hashtable */
 					} else {
-						read_resp * resp = (read_resp*) malloc(sizeof(read_resp));
 						chunk_info *c = (chunk_info*)ep_temp->data;
+						if (read_req_obj->offset >= c->chunk_size) {
+							#ifdef DEBUG
+							printf("Read error - data does not exist\n");
+							#endif
+							retval = -ENODATA;
+							break;
+						}
+						read_resp * resp = (read_resp*) malloc(sizeof(read_resp));
 						c->last_read = (c->last_read + 1) % 2;	
 						/* Prepare response */
 						strcpy(resp->ip_address, chunk_servers[c->chunkserver_id[c->last_read]].ip_addr);
@@ -485,12 +445,8 @@ void* handle_client_request(void *arg)
 				/* For now, Only next chunk can be appended */
 				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
 				          Also, a current size variable must be maintained within chunk_info */
-				if(((file_info*)ep->data)->num_of_chunks != write_req_obj->chunk_index){
-					#ifdef DEBUG
-					printf("Error not an append operation\n");
-					#endif
-					retval = -EPERM;
-				} else {
+                              if (    (((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
+                                      (((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
 
 					/* Prepare chunk object */	
 					pthread_mutex_lock(&seq_mutex);
@@ -498,7 +454,7 @@ void* handle_client_request(void *arg)
 					pthread_mutex_unlock(&seq_mutex);
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
 					sprintf(c->chunk_handle, "%d", chunk_id);
-					char *temp = (char*)malloc(10);
+					char * temp = (char*)malloc(10);
 					sprintf(temp, "%d", write_req_obj->chunk_index);
 					e.key = temp;
 
@@ -513,13 +469,16 @@ void* handle_client_request(void *arg)
 					secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
 					pthread_mutex_unlock(&seq_mutex);
 					c->last_read = 1;
-					add_tochunklist(c->chunkserver_id[0],c->chunkserver_id[1],c->chunk_handle);
-					add_tochunklist(c->chunkserver_id[1],c->chunkserver_id[0],c->chunk_handle);
+					add_tochunklist(c,0);
+					add_tochunklist(c,1);
+
+					/* TODO: Commit the chunk only when write-done message is received from client */
+					c->chunk_size = write_req_obj->size;
 
 					/* Enter into hashtable */
 					e.data = c;
 					((file_info*)ep->data)->num_of_chunks++;
-					((file_info*)ep->data)->filestat.st_size += CHUNK_SIZE;
+					((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
 					hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
 
 					/* Prepare response */
@@ -533,7 +492,45 @@ void* handle_client_request(void *arg)
 					msg->msg_iov[1].iov_len = sizeof(write_resp);
 
 					retval = 0;
-				}
+
+			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
+						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
+
+				      	char temp[10];
+				      	sprintf(temp, "%d", write_req_obj->chunk_index);
+				      	e.key = temp;
+					/* Chunk not found in hashtable */
+					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
+						#ifdef DEBUG
+						printf("Read error - chunk does not exist\n");
+						#endif
+						retval = -ENODATA;
+					/* Chunk found in hashtable */
+					} else {
+						chunk_info *c = (chunk_info*)ep_temp->data;
+
+						/* TODO: Commit the chunk only when write-done message is received from client */
+						c->chunk_size += write_req_obj->size;
+						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+
+						/* Prepare response */
+						write_resp * resp = (write_resp*) malloc(sizeof(write_resp));
+						strcpy(resp->ip_address_primary, chunk_servers[c->chunkserver_id[0]].ip_addr);
+						resp->port_primary = chunk_servers[c->chunkserver_id[0]].client_port;
+						strcpy(resp->ip_address_secondary, chunk_servers[c->chunkserver_id[1]].ip_addr);
+						resp->port_secondary = chunk_servers[c->chunkserver_id[1]].client_port;
+						strcpy(resp->chunk_handle, c->chunk_handle);
+						msg->msg_iov[1].iov_base = resp;
+						msg->msg_iov[1].iov_len = sizeof(write_resp);
+
+						retval = 0;
+					}
+			      } else {
+#ifdef DEBUG
+				      printf("Error not an append operation\n");
+#endif
+				      retval = -EPERM;
+			      }
 
 			}
 
@@ -578,7 +575,7 @@ void* heartbeat_thread(void* ptr)
 	int index = (int)ptr, retval;
 
 	struct msghdr *msg;
-	prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+	//prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
 	char buf[200];
 	int id = 0;	
 	#ifdef DEBUG
@@ -591,38 +588,55 @@ void* heartbeat_thread(void* ptr)
 			sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
 			write(1, buf, strlen(buf));
 		#endif
-		/* Send heartbeat request to chunkserver */
-		retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
-		//retval = send(chunk_servers[index].conn_socket, "Hi", 3, 0);
-		if (retval == -1) {
-			chunk_servers[index].is_up = 0;
-			re_replicate(index);
-			sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
-			write(1, buf, strlen(buf));
-			break;
-		} else {
-		#ifdef DEBUG1
-			sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
-			write(1, buf, strlen(buf));
-		#endif
-		}	
+		
+		pthread_mutex_lock(&msg_mutex);
+			/* Send heartbeat request to chunkserver */
+			//retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
+			//fsync(chunk_servers[index].conn_socket);	
+			//printf("ithe\n");
+			retval = send(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
+			//printf("khali\n");
+			if (retval <= 0) {
+				chunk_servers[index].is_up = 0;
+				sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
+				write(1, buf, strlen(buf));
+				sprintf(buf,"starting re-replication for chunkserver %d\n",index);
+				write(1, buf, strlen(buf));
+				close(chunk_servers[index].conn_socket);
+				pthread_mutex_unlock(&msg_mutex);
+				re_replicate(index);
+				break;
+			} else {
+				#ifdef DEBUG1
+					sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
+					write(1, buf, strlen(buf));
+				#endif
+			}	
 
-		/* Wait for heartbeat reply from chunkserver */
-		retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
-		if (retval == -1) {
-			chunk_servers[index].is_up = 0;
-			re_replicate(index);
-			sprintf(buf, "Chunkserver-%d is down\n",index);
-			write(1, buf, strlen(buf));
-			break;
-		} else {
-		#ifdef DEBUG1
-			sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
-			write(1, buf, strlen(buf));
-		#endif
-		}
+			/* Wait for heartbeat reply from chunkserver */
+			//retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
+			fflush(stdout);	
+			retval = recv(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
+			if (retval <= 0) {
+				chunk_servers[index].is_up = 0;
+				sprintf(buf, "Chunkserver-%d is down\n",index);
+				write(1, buf, strlen(buf));
+				sprintf(buf,"starting re-replication for chunkserver %d\n",index);
+				write(1, buf, strlen(buf));
+				close(chunk_servers[index].conn_socket);
+				pthread_mutex_unlock(&msg_mutex);
+				re_replicate(index);
+				break;
+			} else {
+			#ifdef DEBUG1
+				sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
+				write(1, buf, strlen(buf));
+			#endif
+			}
+		pthread_mutex_unlock(&msg_mutex);
 
 		/* Heartbeat is exchanged every 5 sec */
 		sleep(5);
 	}
+	printf("Exiting heartbeat thread of chunkserver %d",index);
 }

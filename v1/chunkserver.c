@@ -150,8 +150,8 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	}
 
 	fseek(chunk_fd, req->offset, SEEK_SET);
-	size_t retval = fread(resp->chunk, req->size, 1, chunk_fd);
-	if (retval != 1) {
+	size_t retval = fread(resp->chunk, 1, req->size, chunk_fd);
+	if (retval != 0) {
 	#ifdef DEBUG
 		printf("failure: chunkfile not read\n");
 	#endif
@@ -164,6 +164,7 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 			printf("%c", resp->chunk[i]);
 		printf("\n");
 	#endif
+		resp->size = retval;
 	}
 	return 0; 
 }

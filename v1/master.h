@@ -4,6 +4,7 @@
 #include<sys/types.h>
 #include<sys/stat.h>
 #include<search.h>
+#include<pthread.h>
 
 #define CLIENT_LISTEN_PORT 5000
 #define CHUNKSERVER_LISTEN_PORT 6000
@@ -39,11 +40,12 @@ typedef struct chunk_info_ {
 	char	chunk_handle[64];
 	int	chunkserver_id[2];
 	int	last_read;
-	int	chunk_size;
+	int     chunk_size;
 }chunk_info;
 
 extern int failover_array[6][3];
 extern chunkserver chunk_servers[NUM_CHUNKSERVERS];
+extern pthread_mutex_t msg_mutex;
 
 void* connect_chunkserver_thread(void*);
 void* client_request_listener(void*);

@@ -324,7 +324,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		if(dfsmsg->status == 0) {
 			/* Update number of bytes read */
 			resp = msg->msg_iov[1].iov_base;
-			memcpy(buf+size_read, resp->chunk, CHUNK_SIZE); 
+			memcpy(buf+size_read, resp->chunk, resp->size); 
 			#ifdef DEBUG
 			int i;
 			printf("Data read is - \n");
@@ -332,7 +332,10 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 				printf("%c", buf[i+size_read]);
 			printf("\n");
 			#endif
-			size_read += chunk_size;
+			size_read += resp->size;
+			if (resp->size < chunk_size) {
+				break;
+			}
 		}
 		free(resp);
 		free_msg(msg);
@@ -377,10 +380,10 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		} else {
 			chunk_offset = 0;
 		}
-		if ((size - size_read) > CHUNK_SIZE) {
+		if ((size - write_size) > CHUNK_SIZE) {
 			chunk_size = CHUNK_SIZE - chunk_offset;
 		} else {
-			chunk_size = size - size_read - chunk_offset;
+			chunk_size = size - write_size - chunk_offset;
 		}
 		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
 		prepare_msg(WRITE_REQ, &msg, &write_ptr, sizeof(write_req));
@@ -515,7 +518,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 			/* TODO : send rollback to secondary chunkserver */
 	                return -1;
 		}
-		write_size += size;
+		write_size += chunk_size;
 		close(chunk_soc);
 		free_msg(msg);
 		free(data_ptr);
