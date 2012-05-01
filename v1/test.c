@@ -36,13 +36,14 @@ int write_file(char *filename)
 	int n,i;
 	char *ptr = (char*)malloc(CHUNK_SIZE+1);
 	FILE *fd;
-	if((fd = fopen(filename,"a+"))==NULL){
+	if((fd = fopen(filename,"r+"))==NULL){
 		printf("Error opening file\n");
 		return -1;
 	}
 	printf("Enter number of blocks to be written: ");
 	scanf("%d",&n);
 
+	fseek(fd, 0, SEEK_END);
 	//write n blocks of random data each of size CHUNK_SIZE
 	for(i=0;i<n;i++){
 		memset(ptr,'a'+i,CHUNK_SIZE);
