@@ -261,6 +261,7 @@ void* handle_client_request(void *arg)
 						new_file->filestat.st_ino = file_inode++;
 					pthread_mutex_unlock(&seq_mutex);
 					new_file->num_of_chunks = 0;
+					new_file->write_in_progress = 0;
 					new_file->filestat.st_mode = 00777;
 					new_file->filestat.st_nlink = 0;
 					new_file->filestat.st_uid = 0;
@@ -449,6 +450,7 @@ void* handle_client_request(void *arg)
 
 					/* Prepare chunk object */	
 					pthread_mutex_lock(&seq_mutex);
+					((file_info*)ep->data)->write_in_progress = 1;
 					chunk_id++;
 					pthread_mutex_unlock(&seq_mutex);
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
@@ -478,12 +480,12 @@ void* handle_client_request(void *arg)
 					add_tochunklist(c,1);
 
 					/* TODO: Commit the chunk only when write-done message is received from client */
-					c->chunk_size = write_req_obj->size;
+					//c->chunk_size = write_req_obj->size;
 
 					/* Enter into hashtable */
 					e.data = c;
-					((file_info*)ep->data)->num_of_chunks++;
-					((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+					//((file_info*)ep->data)->num_of_chunks++;
+					//((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
 					hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
 
 					/* Prepare response */
@@ -512,11 +514,15 @@ void* handle_client_request(void *arg)
 						retval = -ENODATA;
 					/* Chunk found in hashtable */
 					} else {
+						pthread_mutex_lock(&seq_mutex);
+						((file_info*)ep->data)->write_in_progress = 1;
+						pthread_mutex_unlock(&seq_mutex);
+
 						chunk_info *c = (chunk_info*)ep_temp->data;
 
 						/* TODO: Commit the chunk only when write-done message is received from client */
-						c->chunk_size += write_req_obj->size;
-						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						//c->chunk_size += write_req_obj->size;
+						//((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
 
 						/* Prepare response */
 						write_resp * resp = (write_resp*) malloc(sizeof(write_resp));
@@ -546,6 +552,85 @@ void* handle_client_request(void *arg)
 			free_msg(msg);
 			break;
 
+		case WRITE_COMMIT_REQ:
+			#ifdef DEBUG
+				printf("received write commit request from client\n");
+			#endif
+			write_req_obj = msg->msg_iov[1].iov_base;
+			e.key = write_req_obj->filename;
+
+			/* File not found */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0){
+				#ifdef DEBUG
+				printf("File not present\n");
+				#endif
+				retval = -ENOENT;
+			/* File found */
+			} else {
+				/* For now, Only next chunk can be appended */
+				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
+				          Also, a current size variable must be maintained within chunk_info */
+                              if (    (((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
+                                      (((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
+
+				      	char temp[10];
+				      	sprintf(temp, "%d", write_req_obj->chunk_index);
+				      	e.key = temp;
+					/* Chunk not found in hashtable */
+					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
+						#ifdef DEBUG
+						printf("write commit error - chunk does not exist\n");
+						#endif
+						retval = -ENODATA;
+					} else {
+						/* Chunk found in hashtable */
+						((file_info*)ep->data)->num_of_chunks++;
+						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						chunk_info *c = (chunk_info*)ep_temp->data;
+						c->chunk_size = write_req_obj->size;
+						pthread_mutex_lock(&seq_mutex);
+						((file_info*)ep->data)->write_in_progress = 0;
+						pthread_mutex_unlock(&seq_mutex);
+						retval = 0;
+					}
+			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
+						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
+
+				      	char temp[10];
+				      	sprintf(temp, "%d", write_req_obj->chunk_index);
+				      	e.key = temp;
+					/* Chunk not found in hashtable */
+					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
+						#ifdef DEBUG
+						printf("Read error - chunk does not exist\n");
+						#endif
+						retval = -ENODATA;
+					/* Chunk found in hashtable */
+					} else {
+						chunk_info *c = (chunk_info*)ep_temp->data;
+						c->chunk_size += write_req_obj->size;
+						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						pthread_mutex_lock(&seq_mutex);
+						((file_info*)ep->data)->write_in_progress = 0;
+						pthread_mutex_unlock(&seq_mutex);
+
+						retval = 0;
+					}
+			      } else {
+#ifdef DEBUG
+				      printf("Error not an append operation\n");
+#endif
+				      retval = -EPERM;
+			      }
+
+			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			sendmsg(soc, msg, 0);
+			dfsmsg->msg_type = WRITE_COMMIT_RESP;
+			free_msg(msg);
+			break;
 	}
 }
 

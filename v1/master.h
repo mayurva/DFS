@@ -33,6 +33,7 @@ typedef struct chunkserver_ {
 typedef struct file_info_ {
 	struct	hsearch_data *chunk_list;
 	int	num_of_chunks;
+	int 	write_in_progress;
 	struct	stat filestat;
 }file_info;
 

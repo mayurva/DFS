@@ -43,6 +43,10 @@ enum msg_type {
 	WRITE_RESP,
 	WRITE_DATA_REQ,
 	WRITE_DATA_RESP,
+	WRITE_COMMIT_REQ,
+	WRITE_COMMIT_RESP,
+	ROLLBACK_REQ, 
+	ROLLBACK_RESP,
 };
 
 typedef struct dfs_msg_ {

@@ -514,17 +514,70 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		if (dfsmsg->status != 0) {
                 	printf("%s: Error writing data to primary chunserver\n",__func__);
 			free_msg(msg);
-			free(data_ptr);
 			/* TODO : send rollback to secondary chunkserver */
-	                return -1;
+			if((chunk_soc = createSocket())==-1){
+				printf("%s: Error creating socket\n",__func__);
+				return -1;
+			}
+			if(createConnection(chunk_server[1],chunk_soc) == -1){
+				printf("%s: can not connect to the chunk server\n",__func__);
+				return -1;
+			}
+			prepare_msg(ROLLBACK_REQ, &msg, data_ptr, sizeof(write_data_req));
+			if((sendmsg(chunk_soc,msg,0))==-1){
+				printf("%s: message sending failed\n",__func__);
+				free_msg(msg);
+				free(data_ptr);
+				return -1;
+			} else {
+				printf("%s: Sent write request to secondary chunkserver\n",__func__);
+			}
+			/* Reply from secondary chunkserver */
+			if((recvmsg(chunk_soc,msg,0))==-1) {
+				printf("%s: message receipt failed\n",__func__);
+				free_msg(msg);
+				free(data_ptr);
+				return -1;
+			} else {
+				printf("%s: Received write reply from secondary chunkserver\n",__func__);
+			}
+			free(data_ptr);
+			return -1;
 		}
+		if((master_soc = createSocket())==-1){
+			printf("%s: Error creating socket\n",__func__);
+			return -1;
+		}
+
+		if(createConnection(master,master_soc) == -1){
+			printf("%s: can not connect to the master server\n",__func__);
+			return -1;
+		}
+		prepare_msg(WRITE_COMMIT_REQ, &msg, &write_ptr, sizeof(write_req));
+		print_msg(msg->msg_iov[0].iov_base);
+		if((sendmsg(master_soc,msg,0))==-1){
+                	printf("%s: message sending failed\n",__func__);
+	                return -1;
+        	}
+
+        	/* Matadata reply from master */
+        	if((recvmsg(master_soc,msg,0))==-1){
+                	printf("%s: message receipt failed\n",__func__);
+	                return -1;
+        	}
+		close(master_soc);
+	 	dfsmsg =  msg->msg_iov[0].iov_base;
+		if (dfsmsg->status != 0) {
+                	printf("%s: Error commiting write on master\n",__func__);
+	                return -1;
+        	}
 		write_size += chunk_size;
 		close(chunk_soc);
 		free_msg(msg);
 		free(data_ptr);
 	}
 	/* Return number of bytes written */
-	#ifdef DEBUG
+#ifdef DEBUG
 	printf("No. of bytes written successfully - %d\n", write_size);
 	#endif
 	return write_size;

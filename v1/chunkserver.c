@@ -221,6 +221,31 @@ int chunk_write(write_data_req *req)
 	return 0; 
 }
 
+int chunk_delete(write_data_req *req)
+{
+	char	path[256];
+	
+	strcpy(path, chunk_path);
+	strcat(path, &(req->chunk[CHUNK_SIZE]));
+	#ifdef DEBUG
+	printf("deleting chunk - %s\n", path);
+	#endif
+
+	int retval = unlink(path);
+	if (retval != 0) {
+	#ifdef DEBUG
+		printf("cannot delete chunk file- %s\n", path);
+	#endif
+		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("deleted chunk file- %s\n", path);
+	#endif
+	}
+	
+	return 0; 
+}
+
 void* handle_client_request(void *arg)
 {	
         struct msghdr *msg;
@@ -268,6 +293,19 @@ void* handle_client_request(void *arg)
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
 			dfsmsg->msg_type = WRITE_DATA_RESP; 
+			retval = sendmsg(soc, msg, 0); 
+			if (retval == -1) {
+				printf("failed to send write reply to client - errno-%d\n", errno);
+			} else {
+				#ifdef DEBUG
+				printf("sent write reply to client\n");
+				#endif
+			}
+			break;
+
+                case ROLLBACK_REQ:
+			dfsmsg->status = chunk_delete(msg->msg_iov[1].iov_base);
+			dfsmsg->msg_type = ROLLBACK_RESP; 
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {
 				printf("failed to send write reply to client - errno-%d\n", errno);
