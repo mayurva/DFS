@@ -553,6 +553,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 			printf("%s: can not connect to the master server\n",__func__);
 			return -1;
 		}
+		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
 		prepare_msg(WRITE_COMMIT_REQ, &msg, &write_ptr, sizeof(write_req));
 		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
