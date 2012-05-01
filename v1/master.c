@@ -32,7 +32,6 @@ pthread_mutex_t seq_mutex;
 pthread_mutex_t msg_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
-
 int master_init()
 {
 	char *hostname;
@@ -462,12 +461,18 @@ void* handle_client_request(void *arg)
 
 					/* Assign primary chunkserver */
 					c->chunkserver_id[0] = chunk_id % NUM_CHUNKSERVERS;				
-
+					if (chunk_servers[c->chunkserver_id[0]].is_up == 0) {
+						c->chunkserver_id[0] = (c->chunkserver_id[0] + 1) % NUM_CHUNKSERVERS;
+					}
+	
 					/* Assign secondary chunkserver */
 					c->chunkserver_id[1] = (c->chunkserver_id[0] + (secondary_count))%NUM_CHUNKSERVERS;
-					pthread_mutex_lock(&seq_mutex);
-					secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
-					pthread_mutex_unlock(&seq_mutex);
+					while ((chunk_servers[c->chunkserver_id[1]].is_up == 0) || (c->chunkserver_id[0] == c->chunkserver_id[1])) {
+						c->chunkserver_id[1] = (c->chunkserver_id[1] + 1) % NUM_CHUNKSERVERS;
+						pthread_mutex_lock(&seq_mutex);
+						secondary_count = (secondary_count+1)%(NUM_CHUNKSERVERS-1)+1;
+						pthread_mutex_unlock(&seq_mutex);
+					}
 					c->last_read = 1;
 					add_tochunklist(c,0);
 					add_tochunklist(c,1);

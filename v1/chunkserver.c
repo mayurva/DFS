@@ -32,7 +32,10 @@ int chunkserver_init(int argc, char *argv[])
 	#ifdef DEBUG
 		printf("path is %s\n", chunk_path);
 	#endif
-	
+	char command[50];
+	sprintf(command, "rm -fr %s", chunk_path);
+	system(command);
+	mkdir(chunk_path, 0777);	
 	/* Set ip addr and port of master */
 	strcpy(master.ip_addr, argv[2]);
 	master.port = MASTER_LISTEN;
