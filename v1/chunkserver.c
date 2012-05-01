@@ -18,7 +18,7 @@ pthread_mutex_t	seq_mutex;
 #define MAX_THR 100
 pthread_t       threads[MAX_THR];
 int thr_id = 0;
-
+#define DEBUG
 int chunkserver_init(int argc, char *argv[])
 {
 
@@ -151,7 +151,7 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 
 	fseek(chunk_fd, req->offset, SEEK_SET);
 	size_t retval = fread(resp->chunk, 1, req->size, chunk_fd);
-	if (retval != 0) {
+	if (retval == 0) {
 	#ifdef DEBUG
 		printf("failure: chunkfile not read\n");
 	#endif
@@ -183,7 +183,7 @@ int chunk_write(write_data_req *req)
 	printf("creating chunk for write - %s\n", path);
 	#endif
 
-	FILE * chunk_fd = fopen(path, "w+");
+	FILE * chunk_fd = fopen(path, "a");
 	if (chunk_fd == NULL) {
 	#ifdef DEBUG
 		printf("cannot open chunk file for writing - %s\n", path);
@@ -202,7 +202,7 @@ int chunk_write(write_data_req *req)
 	printf("\n");
 	#endif
 
-	fseek(chunk_fd, req->offset, SEEK_SET);
+	//fseek(chunk_fd, req->offset, SEEK_SET);
 	size_t retval = fwrite(req->chunk, req->size, 1, chunk_fd);
 	fclose(chunk_fd);
 	if (retval != 1) {
@@ -264,7 +264,6 @@ void* handle_client_request(void *arg)
 
                 case WRITE_DATA_REQ:
 			dfsmsg->status = chunk_write(msg->msg_iov[1].iov_base);
-			printf("input path is %s\n",msg->msg_iov[1].iov_base);
 			dfsmsg->msg_type = WRITE_DATA_RESP; 
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {
@@ -310,38 +309,41 @@ void* listenClient(void* ptr)
 
 void* listenMaster(void* ptr)
 {
-	int soc;
-	struct msghdr *msg;
-	int index;
-	int id = 0;
-	char buf[200];
-	#ifdef DEBUG
-		printf("This thread receives periodic heartbeat messages from master\n");
-	#endif
-	while(1) {
-		char buf1[10];
-		prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
-		int retval = recvmsg(master_socket, msg, 0);
-		//int retval = recv(master_socket, buf1, 3, 0);
-		if (retval == -1) {
-			sprintf(buf, "Failed to receive heartbeat from master - %d\n", errno);
-			write(1, buf, strlen(buf));
-		} else {	
-		#ifdef DEBUG1
-			sprintf(buf, "\nreceived heartbeat message-%d from master\n", ++id);
-			write(1, buf, strlen(buf));
-		#endif
-		}
+        int soc;
+//      struct msghdr *msg;
+        int index;
+        int id = 0;
+        char buf[200];
+        //char msg[MAX_BUF_SZ];
+        #ifdef DEBUG
+                printf("This thread receives periodic heartbeat messages from master\n");
+        #endif
+        while(1) {
+                char buf1[10];
+                //prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+                int retval = recv(master_socket, &id, sizeof(int), 0);
+                //int retval = recv(master_socket, buf1, 3, 0);
+                if (retval == -1) {
+                        sprintf(buf, "Failed to receive heartbeat from master - %d\n", errno);
+                        write(1, buf, strlen(buf));
+                } else {
+                #ifdef DEBUG1
+                        sprintf(buf, "\nreceived heartbeat message-%d from master\n", ++id);
+                        write(1, buf, strlen(buf));
+                #endif
+                }
 
-		retval = sendmsg(master_socket, msg, 0);
-		if (retval == -1) {
-			sprintf(buf, "Failed to send heartbeat ACK to master - %d\n", errno);
-			write(1, buf, strlen(buf));
-		} else {	
-		#ifdef DEBUG1
-			sprintf(buf, "Sent heartbeat ACK-%d to master\n", id);
-			write(1, buf, strlen(buf));
-		#endif
-		}
-	}	
+                retval = send(master_socket,&id,sizeof(int),0);
+//              retval = sendmsg(master_socket, msg, 0);
+                if (retval == -1) {
+                        sprintf(buf, "Failed to send heartbeat ACK to master - %d\n", errno);
+                        write(1, buf, strlen(buf));
+                } else {
+                #ifdef DEBUG1
+                        sprintf(buf, "Sent heartbeat ACK-%d to master\n", id);
+                        write(1, buf, strlen(buf));
+                #endif
+                }
+        }
 }
+

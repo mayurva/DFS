@@ -569,74 +569,77 @@ void* client_request_listener(void* ptr){
 	}
 }
 
+
+
 /* Heartbeat thread */
 void* heartbeat_thread(void* ptr)
 {
-	int index = (int)ptr, retval;
+        int index = (int)ptr, retval;
 
-	struct msghdr *msg;
-	//prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
-	char buf[200];
-	int id = 0;	
-	#ifdef DEBUG
-		printf("this thread sends heartbeat messages to chunkserver %d\n",index);
-	#endif
+        struct msghdr *msg;
+        //prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+        char buf[200];
+        int id = 0;
+        #ifdef DEBUG
+                printf("this thread sends heartbeat messages to chunkserver %d\n",index);
+        #endif
 
-	while(1) {
+        while(1) {
 
-		#ifdef DEBUG1
-			sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
-			write(1, buf, strlen(buf));
-		#endif
-		
-		pthread_mutex_lock(&msg_mutex);
-			/* Send heartbeat request to chunkserver */
-			//retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
-			//fsync(chunk_servers[index].conn_socket);	
-			//printf("ithe\n");
-			retval = send(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
-			//printf("khali\n");
-			if (retval <= 0) {
-				chunk_servers[index].is_up = 0;
-				sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
-				write(1, buf, strlen(buf));
-				sprintf(buf,"starting re-replication for chunkserver %d\n",index);
-				write(1, buf, strlen(buf));
-				close(chunk_servers[index].conn_socket);
-				pthread_mutex_unlock(&msg_mutex);
-				re_replicate(index);
-				break;
-			} else {
-				#ifdef DEBUG1
-					sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
-					write(1, buf, strlen(buf));
-				#endif
-			}	
+                #ifdef DEBUG1
+                        sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
+                        write(1, buf, strlen(buf));
+                #endif
 
-			/* Wait for heartbeat reply from chunkserver */
-			//retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
-			fflush(stdout);	
-			retval = recv(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
-			if (retval <= 0) {
-				chunk_servers[index].is_up = 0;
-				sprintf(buf, "Chunkserver-%d is down\n",index);
-				write(1, buf, strlen(buf));
-				sprintf(buf,"starting re-replication for chunkserver %d\n",index);
-				write(1, buf, strlen(buf));
-				close(chunk_servers[index].conn_socket);
-				pthread_mutex_unlock(&msg_mutex);
-				re_replicate(index);
-				break;
-			} else {
-			#ifdef DEBUG1
-				sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
-				write(1, buf, strlen(buf));
-			#endif
-			}
-		pthread_mutex_unlock(&msg_mutex);
+                pthread_mutex_lock(&msg_mutex);
+                        /* Send heartbeat request to chunkserver */
+                        //retval = sendmsg(chunk_servers[index].conn_socket, msg, 0);
+                        //fsync(chunk_servers[index].conn_socket);      
+                        //printf("ithe\n");
+                        retval = send(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
+                        //printf("khali\n");
+                        if (retval <= 0) {
+                                chunk_servers[index].is_up = 0;
+                                sprintf(buf, "Chunkserver-%d is down errno = %d\n",index, errno);
+                                write(1, buf, strlen(buf));
+                                sprintf(buf,"starting re-replication for chunkserver %d\n",index);
+                                write(1, buf, strlen(buf));
+                                close(chunk_servers[index].conn_socket);
+                                pthread_mutex_unlock(&msg_mutex);
+                                re_replicate(index);
+                                break;
+                        } else {
+                                #ifdef DEBUG1
+                                        sprintf(buf, "\nSent heartbeat message-%d to Chunkserver-%d\n", ++id, index);
+                                        write(1, buf, strlen(buf));
+                                #endif
+                        }
 
-		/* Heartbeat is exchanged every 5 sec */
-		sleep(5);
-	}
-	printf("Exiting heartbeat thread of chunkserver %d",index);
+                        /* Wait for heartbeat reply from chunkserver */
+                        //retval = recvmsg(chunk_servers[index].conn_socket, msg, 0);
+                        fflush(stdout);
+                        retval = recv(chunk_servers[index].conn_socket, &id, sizeof(int), 0);
+                        if (retval <= 0) {
+                                chunk_servers[index].is_up = 0;
+                                sprintf(buf, "Chunkserver-%d is down\n",index);
+                                write(1, buf, strlen(buf));
+                                sprintf(buf,"starting re-replication for chunkserver %d\n",index);
+                                write(1, buf, strlen(buf));
+                                close(chunk_servers[index].conn_socket);
+                                pthread_mutex_unlock(&msg_mutex);
+                                re_replicate(index);
+                                break;
+                        } else {
+                        #ifdef DEBUG1
+                                sprintf(buf, "Received heartbeat ACK-%d from chunkserver-%d\n", id, index);
+                                write(1, buf, strlen(buf));
+                        #endif
+                        }
+                pthread_mutex_unlock(&msg_mutex);
+
+                /* Heartbeat is exchanged every 5 sec */
+                sleep(5);
+        }
+        printf("Exiting heartbeat thread of chunkserver %d",index);
 }
+

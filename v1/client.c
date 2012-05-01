@@ -13,7 +13,7 @@ struct msghdr *msg;
 host master;
 int master_soc;
 pthread_mutex_t seq_mutex;
-
+#define DEBUG
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	int ret;
@@ -255,10 +255,10 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		} else {
 			chunk_offset = 0;
 		}
-		if ((size - size_read) > CHUNK_SIZE) {
+		if ((size - size_read + chunk_offset) > CHUNK_SIZE) {
 			chunk_size = CHUNK_SIZE - chunk_offset;
 		} else {
-			chunk_size = size - size_read - chunk_offset;
+			chunk_size = size - size_read;
 		}
 		create_read_req(&read_ptr,path,i, chunk_offset, chunk_size);
 		prepare_msg(READ_REQ, &msg, &read_ptr, sizeof(read_req));
@@ -326,10 +326,10 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 			resp = msg->msg_iov[1].iov_base;
 			memcpy(buf+size_read, resp->chunk, resp->size); 
 			#ifdef DEBUG
-			int i;
+			int j;
 			printf("Data read is - \n");
-			for (i = 0; i < CHUNK_SIZE; i++) 
-				printf("%c", buf[i+size_read]);
+			for (j = 0; j < CHUNK_SIZE; j++) 
+				printf("%c", buf[j+size_read]);
 			printf("\n");
 			#endif
 			size_read += resp->size;
@@ -380,10 +380,10 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		} else {
 			chunk_offset = 0;
 		}
-		if ((size - write_size) > CHUNK_SIZE) {
+		if ((size - write_size + chunk_offset) > CHUNK_SIZE) {
 			chunk_size = CHUNK_SIZE - chunk_offset;
 		} else {
-			chunk_size = size - write_size - chunk_offset;
+			chunk_size = size - write_size;
 		}
 		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
 		prepare_msg(WRITE_REQ, &msg, &write_ptr, sizeof(write_req));
@@ -432,10 +432,10 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
 		create_write_data_req(data_ptr, resp->chunk_handle, buf+ write_size, chunk_offset, chunk_size);
 		#ifdef DEBUG
-		int i;
+		int j;
 		printf("Data to be written is - \n");
-		for (i = 0; i < CHUNK_SIZE+64; i++) 
-			printf("%c", data_ptr->chunk[i]);
+		for (j = 0; j < CHUNK_SIZE+64; j++) 
+			printf("%c", data_ptr->chunk[j]);
 //		printf("\nhandle - %s\n", data_ptr->chunk+CHUNK_SIZE);
 		printf("\n");
 		#endif
