@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #define DEBUG
 
@@ -23,6 +24,7 @@ host master;
 int file_inode =0;
 unsigned chunk_id = 0;
 int secondary_count = 1;
+directory root;
 
 int client_request_socket;
 int heartbeat_socket;
@@ -32,6 +34,7 @@ pthread_mutex_t seq_mutex;
 pthread_mutex_t msg_mutex;
 pthread_t	threads[MAX_THR];
 int thr_id = 0;
+
 int master_init()
 {
 	char *hostname;
@@ -66,6 +69,7 @@ int master_init()
 		#endif
 		i++;
 	}
+	root.head = root.tail = NULL;
 
 
 	/* Set master ip address */
@@ -164,7 +168,7 @@ void* connect_chunkserver_thread(void* ptr)
 			write(1, buf, strlen(buf));
 			continue;
 		}
- 
+
 		/* find if this chunkserver present in configured list. return the index if so */
 		if((j = find_chunkserver(h)) != -1  ) {	
 			chunk_servers[j].conn_socket = soc;
@@ -199,6 +203,10 @@ void* handle_client_request(void *arg)
 	ENTRY e,*ep,*ep_temp;
 	struct timeval tv;
 	int retval = 0;
+
+	char *buf = malloc(sizeof(char)*MAX_BUF_SZ);
+	file_info *temp;
+	struct stat st;	
 
 	open_req *open_req_obj;
 	write_req *write_req_obj;
@@ -256,6 +264,7 @@ void* handle_client_request(void *arg)
 					}
 
 					/* Initialize file stats */
+					strcpy(new_file->file_name,open_req_obj->path);
 					new_file->filestat.st_dev = 0;
 					pthread_mutex_lock(&seq_mutex);
 						new_file->filestat.st_ino = file_inode++;
@@ -272,7 +281,8 @@ void* handle_client_request(void *arg)
 					new_file->filestat.st_blocks = new_file->filestat.st_size/512;
 					gettimeofday(&tv,NULL);
 					new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
-								
+					new_file->next = NULL;
+					
 					e.data = new_file;
 					if(hsearch_r(e, ENTER, &ep, file_list) == 0){
 						printf("Error creating file %s\n",open_req_obj->path);
@@ -283,8 +293,15 @@ void* handle_client_request(void *arg)
 						#ifdef DEBUG
 							printf("written to file list\n");
 						#endif
-						retval = 0;			
+						if(root.head == NULL){
+							root.head = root.tail = new_file;
+						}
+						else{
+							root.tail -> next = new_file;
+							root.tail = root.tail -> next;
+						}
 						fclose(filelist);
+						retval = 0;			
 					}
 				/* File is being opened */
 				} else {
@@ -355,8 +372,46 @@ void* handle_client_request(void *arg)
 			break;
 
 		case READDIR_REQ:
+			temp = root.head;
 			#ifdef DEBUG
-			printf("received readdir request from client\n");
+				printf("received readdir request from client\n");
+			#endif
+			while(temp){
+				memcpy(&st,&temp->filestat,sizeof(struct stat));
+				//free_msg(msg);
+				//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct dirent));
+				//sendmsg(soc,msg,0);
+				send(soc,temp->file_name,strlen(temp->file_name)+1,0);
+				#ifdef DEBUG
+					printf("sent the file name\n",temp->file_name);
+				#endif
+				free_msg(msg);
+				prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+				recvmsg(soc,msg,0);
+				#ifdef DEBUG
+					printf("Received request for stat\n");
+				#endif 
+				//free_msg(msg);
+				//prepare_msg(READDIR_RESP,&msg,temp->file_name,MAX_BUF_SZ);
+				send(soc,&st,sizeof(struct stat),0);
+				#ifdef DEBUG
+					printf("sent the stat\n");
+				#endif
+				free_msg(msg);
+				prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+				recvmsg(soc,msg,0);
+				#ifdef DEBUG
+					printf("request for next record\n");
+				#endif
+				temp = temp -> next;
+
+			}
+			//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct stat));
+			((dfs_msg*)(msg->msg_iov[0]).iov_base)->status = -1;
+			printf("value sent out is %d\n",((dfs_msg*)(msg->msg_iov[0]).iov_base)->status);
+                        send(soc,"END",strlen("END")+1,0);
+			#ifdef DEBUG
+				printf("sent the last message on readdir\n");
 			#endif
 			free_msg(msg);
 			break;
@@ -445,8 +500,8 @@ void* handle_client_request(void *arg)
 				/* For now, Only next chunk can be appended */
 				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
 				          Also, a current size variable must be maintained within chunk_info */
-                              if (    (((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
-                                      (((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
+				if ((((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
+						(((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
 
 					/* Prepare chunk object */	
 					pthread_mutex_lock(&seq_mutex);
@@ -462,7 +517,7 @@ void* handle_client_request(void *arg)
 					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
 
 					/* Assign primary chunkserver */
-					c->chunkserver_id[0] = chunk_id % NUM_CHUNKSERVERS;				
+					c->chunkserver_id[0] = (chunk_id+(((file_info*)ep->data)->num_of_chunks)) % NUM_CHUNKSERVERS;				
 					if (chunk_servers[c->chunkserver_id[0]].is_up == 0) {
 						c->chunkserver_id[0] = (c->chunkserver_id[0] + 1) % NUM_CHUNKSERVERS;
 					}
@@ -503,9 +558,9 @@ void* handle_client_request(void *arg)
 			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
 						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
 
-				      	char temp[10];
-				      	sprintf(temp, "%d", write_req_obj->chunk_index);
-				      	e.key = temp;
+						char temp[10];
+						sprintf(temp, "%d", write_req_obj->chunk_index);
+						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
 						#ifdef DEBUG
@@ -536,12 +591,12 @@ void* handle_client_request(void *arg)
 
 						retval = 0;
 					}
-			      } else {
+				} else {
 #ifdef DEBUG
-				      printf("Error not an append operation\n");
+					printf("Error not an append operation\n");
 #endif
-				      retval = -EPERM;
-			      }
+					retval = -EPERM;
+				}
 
 			}
 
@@ -573,9 +628,9 @@ void* handle_client_request(void *arg)
                               if (    (((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
                                       (((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
 
-				      	char temp[10];
-				      	sprintf(temp, "%d", write_req_obj->chunk_index);
-				      	e.key = temp;
+						char temp[10];
+						sprintf(temp, "%d", write_req_obj->chunk_index);
+						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
 						#ifdef DEBUG
@@ -593,12 +648,12 @@ void* handle_client_request(void *arg)
 						pthread_mutex_unlock(&seq_mutex);
 						retval = 0;
 					}
-			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
-						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
+				} else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
+							((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
 
-				      	char temp[10];
-				      	sprintf(temp, "%d", write_req_obj->chunk_index);
-				      	e.key = temp;
+						char temp[10];
+						sprintf(temp, "%d", write_req_obj->chunk_index);
+						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
 						#ifdef DEBUG
@@ -616,12 +671,12 @@ void* handle_client_request(void *arg)
 
 						retval = 0;
 					}
-			      } else {
+				} else {
 #ifdef DEBUG
-				      printf("Error not an append operation\n");
+					printf("Error not an append operation\n");
 #endif
-				      retval = -EPERM;
-			      }
+					retval = -EPERM;
+				}
 
 			}
 
@@ -664,22 +719,22 @@ void* client_request_listener(void* ptr){
 /* Heartbeat thread */
 void* heartbeat_thread(void* ptr)
 {
-        int index = (int)ptr, retval;
+	int index = (int)ptr, retval;
 
-        struct msghdr *msg;
-        //prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
-        char buf[200];
-        int id = 0;
-        #ifdef DEBUG
-                printf("this thread sends heartbeat messages to chunkserver %d\n",index);
-        #endif
+	struct msghdr *msg;
+	//prepare_msg(HEARTBEAT, &msg, &index, sizeof(index));
+	char buf[200];
+	int id = 0;
+	#ifdef DEBUG
+		printf("this thread sends heartbeat messages to chunkserver %d\n",index);
+	#endif
 
-        while(1) {
+	while(1) {
 
-                #ifdef DEBUG1
-                        sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
-                        write(1, buf, strlen(buf));
-                #endif
+		#ifdef DEBUG1
+			sprintf(buf, "Sending heartbeat message to chunkserver %d to socket %d\n", index, chunk_servers[index].conn_socket);
+			write(1, buf, strlen(buf));
+		#endif
 
                 pthread_mutex_lock(&msg_mutex);
                         /* Send heartbeat request to chunkserver */

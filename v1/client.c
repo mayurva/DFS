@@ -9,6 +9,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include<errno.h>
+#include<dirent.h>
 struct msghdr *msg;
 host master;
 int master_soc;
@@ -586,48 +587,105 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 
 static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
 {
-	printf("This is read directory\n");
-	return 0;
+	struct stat st;
+	int ret;
+	char * tempbuf = (char*) malloc (MAX_BUF_SZ);
+	char *file_name = (char*) malloc(MAX_BUF_SZ);
+	strcpy(tempbuf, path);
+	prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+	print_msg(msg->msg_iov[0].iov_base);
 
-//client side code goes here
-/*        printf("Inside getdir Path is: %s\n",path);
-        memset(tcp_buf,0,MAXLEN);
-    sprintf(tcp_buf,"GETDIR\n%s\n",path);
-
-
-//tcp code goes here
-        send(sock,tcp_buf,strlen(tcp_buf),0);
-        memset(tcp_buf,0,MAXLEN);
-        int recFlag=recv(sock,tcp_buf,MAXLEN,0);
-    if(recFlag<0){
-      printf("Error while receiving");
-      exit(1);
-    }
-
-        send(sock,"ok",strlen("ok"),0);
-    int flag=1;
-    while(1)
-      {
-        struct stat tempSt;
-        recv(sock,(char*)&tempSt,sizeof(struct stat),0);
-            send(sock,"ok",strlen("ok"),0);
-        int recFlag=recv(sock,tcp_buf,MAXLEN,0);
-        if(recFlag<0){
-          printf("Error while receiving");
-          exit(1);
+        if((master_soc = createSocket())==-1){
+		printf("%s: Error creating socket\n",__func__);
+		return -1;
         }
-        tcp_buf[recFlag]='\0';
-	if(strcmp(tcp_buf,"end")==0)
-	  break;
-        if (filler(buf, tcp_buf, &tempSt, 0))
-          {
-	    flag=0;
-	    break;
-          }
-      }
-//rest of the code goes here
-        return 0;*/
+
+        if(createConnection(master,master_soc) == -1){
+                printf("%s: can not connect to the master server - error-%d\n",__func__, errno);
+                return -1;
+        }
+
+	/* send a message to master */
+	if((sendmsg(master_soc,msg,0))==-1){
+		printf("%s: message sending failed - %d\n",__func__, errno);
+		return -1;
+	} else {
+	#ifdef DEBUG
+		printf("%s: readdir request sent\n",__func__);
+	#endif
+	}
+
+	/* reply from master */
+	while(1){
+		//free_msg(msg);
+		//prepare_msg(READDIR_RESP, &msg, &st, sizeof(struct stat));
+		if((recv(master_soc,file_name,MAX_BUF_SZ,0))==-1){
+			printf("%s: message receipt failed - %d\n",__func__, errno);
+			return -1;
+		} else {
+		#ifdef DEBUG
+			printf("%s: received filename %s\n",__func__,file_name);
+		#endif
+		}	
+//		if(((dfs_msg*)(msg->msg_iov[0]).iov_base)->status == -1)
+		if(strcmp(file_name,"END")==0)
+			break;
+		//dptr = &d;
+		free_msg(msg);
+		prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+		if((sendmsg(master_soc,msg,0))==-1){
+		printf("%s: message sending failed - %d\n",__func__, errno);
+			return -1;
+		} else {
+		#ifdef DEBUG
+			printf("%s: request sent for stat\n",__func__);
+		#endif
+		}
+		//memcpy(&st,msg->msg_iov[1].iov_base, sizeof(struct stat));
+		//free_msg(msg);
+		//memset(file_name,0,MAX_BUF_SZ);
+		//prepare_msg(READDIR_RESP, &msg, file_name, sizeof(struct stat));
+		if((recv(master_soc,&st,sizeof(struct stat),0))==-1){
+			printf("%s: message receipt failed - %d\n",__func__, errno);
+			return -1;
+		} 
+		//memcpy(file_name,msg->msg_iov[1].iov_base, MAX_BUF_SZ);
+		#ifdef DEBUG
+			printf("%s: received stat\n",__func__);
+		//	printf("status is %d\n",((dfs_msg*)(msg->msg_iov[0]).iov_base)->status);
+		#endif
+	
+		if (filler(buf, file_name+1, &st, 0)){	}
+
+		free_msg(msg);
+		prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+		if((sendmsg(master_soc,msg,0))==-1){
+		printf("%s: message sending failed - %d\n",__func__, errno);
+			return -1;
+		} else {
+			#ifdef DEBUG
+				printf("%s: readdir request sent for next record\n",__func__);
+			#endif
+		}
+		
+
+	}
+	close(master_soc);
 }
+static int gfs_chmod(const char *path, mode_t mode)
+{
+        return 0;
+}
+
+static int gfs_chown(const char *path, uid_t uid, gid_t gid)
+{
+        return 0;
+}
+static int gfs_utimens(const char *path, const struct timespec ts[2])
+{
+        return 0;
+}
+
 
 static struct fuse_operations gfs_oper = {
 	.getattr = (void *)gfs_getattr,
@@ -639,12 +697,12 @@ static struct fuse_operations gfs_oper = {
 	.write = (void *)gfs_write,
 	.readdir = (void *)gfs_readdir,
 	//.access = (void *)dfs_access,
-	//.chmod = (void *)dfs_chmod,
-	//.chown = (void *)dfs_chown,
+	.chmod = (void *)gfs_chmod,
+	.chown = (void *)gfs_chown,
 	//.rmdir = (void *)gfs_rmdir,
 	//.rename = (void *)gfs_rename,
 	//.flush = (void*)dfs_flush, 
-	//.utimens = (void*)dfs_utimens,
+	.utimens = (void*)gfs_utimens,
 	//.getxattr = (void*)dfs_getxattr,
 	//.setxattr = (void*)dfs_setxattr,
 };

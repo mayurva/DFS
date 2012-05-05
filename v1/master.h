@@ -8,7 +8,7 @@
 
 #define CLIENT_LISTEN_PORT 5000
 #define CHUNKSERVER_LISTEN_PORT 6000
-#define MAX_THR 100
+#define MAX_THR 1000000
 #define NUM_CHUNKSERVERS 4
 
 struct chunk_info_;
@@ -31,11 +31,17 @@ typedef struct chunkserver_ {
 }chunkserver;
 
 typedef struct file_info_ {
+	char file_name[MAX_FILENAME];
 	struct	hsearch_data *chunk_list;
 	int	num_of_chunks;
 	int 	write_in_progress;
 	struct	stat filestat;
+	struct file_info_ *next;
 }file_info;
+
+typedef struct directory_{
+	file_info *head,*tail;
+}directory;
 
 typedef struct chunk_info_ {
 	char	chunk_handle[64];

@@ -1,6 +1,6 @@
 #ifndef GFS_H
 #define GFS_H
-//#define DEBUG
+#define DEBUG
 //this file contains common data structures for the overall file system 
 #define	MAX_FILENAME	(1024)
 #define CHUNK_SIZE 	(4096)
@@ -47,6 +47,7 @@ enum msg_type {
 	WRITE_COMMIT_RESP,
 	ROLLBACK_REQ, 
 	ROLLBACK_RESP,
+
 };
 
 typedef struct dfs_msg_ {
