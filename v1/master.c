@@ -353,6 +353,7 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present - %s\n", e.key);
 				#endif
+				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			/* File found */
 			} else {
@@ -369,6 +370,11 @@ void* handle_client_request(void *arg)
 			dfsmsg->msg_type = GETATTR_RESP;
 			sendmsg(soc, msg, 0);
 			free_msg(msg);
+			free(buf);
+			free(data);
+			#ifdef DEBUG
+			printf("received getattr reply sent to client\n");
+			#endif
 			break;
 
 		case READDIR_REQ:

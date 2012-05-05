@@ -10,42 +10,47 @@
 #include<string.h>
 #include<errno.h>
 #include<dirent.h>
-struct msghdr *msg;
-host master;
-int master_soc;
 pthread_mutex_t seq_mutex;
+host master;
 #define DEBUG
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
+	struct msghdr *msg;
+	int master_soc;
 	int ret;
-	char * buf = (char*) malloc (MAX_BUF_SZ);
+	char * buf = (char*) malloc (1000);
 	strcpy(buf, path);
-	prepare_msg(GETATTR_REQ, &msg, buf, MAX_BUF_SZ);
+	prepare_msg(GETATTR_REQ, &msg, buf, 1000);
 	print_msg(msg->msg_iov[0].iov_base);
 
         if((master_soc = createSocket())==-1){
                 printf("%s: Error creating socket\n",__func__);
+		free(buf);
                 return -1;
         }
 
         if(createConnection(master,master_soc) == -1){
                 printf("%s: can not connect to the master server - error-%d\n",__func__, errno);
+		free(buf);
                 return -1;
         }
 
 	/* send a message to master */
 	if((sendmsg(master_soc,msg,0))==-1){
 		printf("%s: message sending failed - %d\n",__func__, errno);
+		free(buf);
 		return -1;
 	} else {
 	#ifdef DEBUG
 		printf("%s: Getattr request sent\n",__func__);
 	#endif
 	}
-
+	free(msg);
+	prepare_msg(GETATTR_REQ, &msg, buf, 1000);
 	/* reply from master */
 	if((recvmsg(master_soc,msg,0))==-1){
 		printf("%s: message receipt failed - %d\n",__func__, errno);
+		free(buf);
 		return -1;
 	} else {
 	#ifdef DEBUG
@@ -60,6 +65,7 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 	#ifdef DEBUG
 		printf("%s: Getattr status is - %d\n",__func__, dfsmsg->status);
 	#endif
+		free(buf);
 		return dfsmsg->status;
 	}
 
@@ -88,11 +94,14 @@ static int gfs_getattr(const char *path, struct stat *stbuf)
 		printf("%s: Getattr status is - %d ino = %llu file size = %llu\n",__func__
 			, dfsmsg->status, stbuf->st_ino, stbuf->st_size);
 	#endif
+	free(buf);
 	return 0;
 }
 
 static int gfs_mkdir(const char *path, mode_t mode)
 {
+	struct msghdr *msg;
+	int master_soc;
        	int ret;
 	mkdir_req data_ptr;
 	create_mkdir_req(&data_ptr,path,mode);
@@ -133,6 +142,8 @@ static int gfs_mkdir(const char *path, mode_t mode)
 
 static int gfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
+	struct msghdr *msg;
+	int master_soc;
         int ret;
 	open_req data_ptr;
 	create_open_req(&data_ptr,path,fi->flags | O_CREAT);
@@ -175,6 +186,8 @@ static int gfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 static int gfs_open(const char *path, struct fuse_file_info *fi)
 {
+	struct msghdr *msg;
+	int master_soc;
         int ret;
 	open_req data_ptr;
 	create_open_req(&data_ptr,path,fi->flags);
@@ -216,6 +229,8 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
+	struct msghdr *msg;
+	int master_soc;
 	int chunk_soc;
 	host chunk_server;
 	int ret;
@@ -315,6 +330,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		prepare_msg(READ_DATA_RESP, &msg, resp, sizeof(read_data_resp));
         	if((recvmsg(chunk_soc,msg,0))==-1){
                 	printf("%s: read reply from chunkserver failed\n",__func__);
+			free(resp);
 	                return -1;
         	} else {
                 	printf("%s: Success: Received read reply from chunkserver\n",__func__);
@@ -353,6 +369,8 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 
 static int gfs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi)
 {
+	struct msghdr *msg;
+	int master_soc;
         int ret;
 	int i;
 	int chunk_soc;
@@ -587,12 +605,14 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 
 static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
 {
+	struct msghdr *msg;
+	int master_soc;
 	struct stat st;
 	int ret;
-	char * tempbuf = (char*) malloc (MAX_BUF_SZ);
-	char *file_name = (char*) malloc(MAX_BUF_SZ);
+	char * tempbuf = (char*) malloc (1000);
+	char *file_name = (char*) malloc(1000);
 	strcpy(tempbuf, path);
-	prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+	prepare_msg(READDIR_REQ, &msg, tempbuf, 1000);
 	print_msg(msg->msg_iov[0].iov_base);
 
         if((master_soc = createSocket())==-1){
@@ -619,7 +639,7 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 	while(1){
 		//free_msg(msg);
 		//prepare_msg(READDIR_RESP, &msg, &st, sizeof(struct stat));
-		if((recv(master_soc,file_name,MAX_BUF_SZ,0))==-1){
+		if((recv(master_soc,file_name,1000,0))==-1){
 			printf("%s: message receipt failed - %d\n",__func__, errno);
 			return -1;
 		} else {
@@ -632,7 +652,7 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 			break;
 		//dptr = &d;
 		free_msg(msg);
-		prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+		prepare_msg(READDIR_REQ, &msg, tempbuf, 1000);
 		if((sendmsg(master_soc,msg,0))==-1){
 		printf("%s: message sending failed - %d\n",__func__, errno);
 			return -1;
@@ -658,7 +678,7 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 		if (filler(buf, file_name+1, &st, 0)){	}
 
 		free_msg(msg);
-		prepare_msg(READDIR_REQ, &msg, tempbuf, MAX_BUF_SZ);
+		prepare_msg(READDIR_REQ, &msg, tempbuf, 1000);
 		if((sendmsg(master_soc,msg,0))==-1){
 		printf("%s: message sending failed - %d\n",__func__, errno);
 			return -1;

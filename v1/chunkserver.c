@@ -261,7 +261,7 @@ void* handle_client_request(void *arg)
 	} else {
 		dfsmsg = (dfs_msg*)msg->msg_iov[0].iov_base;
 		#ifdef DEBUG
-        	printf("received message from client - %d\n", dfsmsg->msg_type);
+        	printf("received message from client - %d bytes = %d\n", dfsmsg->msg_type, retval);
 		#endif
 	}
 
