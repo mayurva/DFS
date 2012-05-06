@@ -692,6 +692,50 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 	}
 	close(master_soc);
 }
+
+static int gfs_unlink(const char *path)
+{
+	struct msghdr *msg;
+	int master_soc;
+        int ret;
+	open_req data_ptr;
+	create_open_req(&data_ptr,path, 0);
+	prepare_msg(UNLINK_REQ, &msg, &data_ptr, sizeof(open_req));
+
+        if((master_soc = createSocket())==-1){
+                printf("%s: Error creating socket\n",__func__);
+                return -1;
+        }
+
+        if(createConnection(master,master_soc) == -1){
+                printf("%s: can not connect to the master server\n",__func__);
+                return -1;
+        }
+	#ifdef DEBUG
+	print_msg(msg->msg_iov[0].iov_base);
+	#endif
+	
+	/* send a message to master */
+        if((sendmsg(master_soc,msg,0))==-1){
+                printf("%s: message sending failed\n",__func__);
+                return -1;
+        }
+
+        /* reply from master */
+        if((recvmsg(master_soc,msg,0))==-1){
+                printf("%s: message receipt failed\n",__func__);
+                return -1;
+        }
+	close(master_soc);
+        
+	/* if failure return -errno */
+        dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
+        if(dfsmsg->status!=0){
+                return dfsmsg->status;
+        }
+        return 0;
+}
+
 static int gfs_chmod(const char *path, mode_t mode)
 {
         return 0;

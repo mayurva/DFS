@@ -37,6 +37,7 @@ typedef struct file_info_ {
 	int 	write_in_progress;
 	struct	stat filestat;
 	struct file_info_ *next;
+	int 	is_deleted;
 }file_info;
 
 typedef struct directory_{

@@ -282,6 +282,7 @@ void* handle_client_request(void *arg)
 					gettimeofday(&tv,NULL);
 					new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
 					new_file->next = NULL;
+					new_file->is_deleted = 0;
 					
 					e.data = new_file;
 					if(hsearch_r(e, ENTER, &ep, file_list) == 0){
@@ -339,6 +340,46 @@ void* handle_client_request(void *arg)
 			free_msg(msg);
 			break;
 
+		case UNLINK_REQ:
+			#ifdef DEBUG
+			printf("received unlink request from client\n");
+			#endif
+			e.key = (char*)msg->msg_iov[1].iov_base;
+			#ifdef DEBUG
+			printf("file is : %s\n", e.key);
+			#endif
+
+			/* File not found */
+			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
+				#ifdef DEBUG
+				printf("File not present - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
+				retval = -ENOENT;
+			/* File found */
+			} else if (((file_info*)ep->data)->is_deleted == 1) {
+				#ifdef DEBUG
+				printf("File deleted - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
+				retval = -ENOENT;
+			} else {
+				((file_info*)ep->data)->is_deleted == 1;
+				retval = 0;
+			}
+
+			/* Send reply to client */
+			dfsmsg->status = retval;
+			dfsmsg->msg_type = UNLINK_RESP;
+			sendmsg(soc, msg, 0);
+			free_msg(msg);
+			free(buf);
+			free(data);
+			#ifdef DEBUG
+			printf("sending unlink reply sent to client\n");
+			#endif
+			break;
+
 		case GETATTR_REQ:
 			#ifdef DEBUG
 			printf("received getattr request from client\n");
@@ -356,6 +397,12 @@ void* handle_client_request(void *arg)
 				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			/* File found */
+			} else if (((file_info*)ep->data)->is_deleted == 1) {
+				#ifdef DEBUG
+				printf("File deleted - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
+				retval = -ENOENT;
 			} else {
 				char str[200];
 				sprintf(str,"%lu %lu ", ((file_info*)ep->data)->filestat.st_ino, ((file_info*)ep->data)->filestat.st_size);
@@ -383,42 +430,44 @@ void* handle_client_request(void *arg)
 				printf("received readdir request from client\n");
 			#endif
 			while(temp){
-				memcpy(&st,&temp->filestat,sizeof(struct stat));
-				//free_msg(msg);
-				//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct dirent));
-				//sendmsg(soc,msg,0);
-				send(soc,temp->file_name,strlen(temp->file_name)+1,0);
-				#ifdef DEBUG
+				if (temp->is_deleted == 1) {
+					memcpy(&st,&temp->filestat,sizeof(struct stat));
+					//free_msg(msg);
+					//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct dirent));
+					//sendmsg(soc,msg,0);
+					send(soc,temp->file_name,strlen(temp->file_name)+1,0);
+					#ifdef DEBUG
 					printf("sent the file name\n",temp->file_name);
-				#endif
-				free_msg(msg);
-				prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
-				recvmsg(soc,msg,0);
-				#ifdef DEBUG
+					#endif
+					free_msg(msg);
+					prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+					recvmsg(soc,msg,0);
+					#ifdef DEBUG
 					printf("Received request for stat\n");
-				#endif 
-				//free_msg(msg);
-				//prepare_msg(READDIR_RESP,&msg,temp->file_name,MAX_BUF_SZ);
-				send(soc,&st,sizeof(struct stat),0);
-				#ifdef DEBUG
+					#endif 
+					//free_msg(msg);
+					//prepare_msg(READDIR_RESP,&msg,temp->file_name,MAX_BUF_SZ);
+					send(soc,&st,sizeof(struct stat),0);
+					#ifdef DEBUG
 					printf("sent the stat\n");
-				#endif
-				free_msg(msg);
-				prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
-				recvmsg(soc,msg,0);
-				#ifdef DEBUG
+					#endif
+					free_msg(msg);
+					prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+					recvmsg(soc,msg,0);
+					#ifdef DEBUG
 					printf("request for next record\n");
-				#endif
+					#endif
+				}
 				temp = temp -> next;
 
 			}
 			//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct stat));
 			((dfs_msg*)(msg->msg_iov[0]).iov_base)->status = -1;
 			printf("value sent out is %d\n",((dfs_msg*)(msg->msg_iov[0]).iov_base)->status);
-                        send(soc,"END",strlen("END")+1,0);
-			#ifdef DEBUG
-				printf("sent the last message on readdir\n");
-			#endif
+			send(soc,"END",strlen("END")+1,0);
+#ifdef DEBUG
+			printf("sent the last message on readdir\n");
+#endif
 			free_msg(msg);
 			break;
 
@@ -434,6 +483,12 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present\n");
 				#endif
+				retval = -ENOENT;
+			} else if (((file_info*)ep->data)->is_deleted == 1) {
+				#ifdef DEBUG
+				printf("File deleted - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			/* File found */
 			} else {
@@ -500,6 +555,18 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present\n");
 				#endif
+				retval = -ENOENT;
+			} else if (((file_info*)ep->data)->write_in_progress == 1) {
+				#ifdef DEBUG
+				printf("Write in progress - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
+				retval = -ENOENT;
+			} else if (((file_info*)ep->data)->is_deleted == 1) {
+				#ifdef DEBUG
+				printf("File deleted - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			/* File found */
 			} else {
@@ -625,6 +692,12 @@ void* handle_client_request(void *arg)
 				#ifdef DEBUG
 				printf("File not present\n");
 				#endif
+				retval = -ENOENT;
+			} else if (((file_info*)ep->data)->is_deleted == 1) {
+				#ifdef DEBUG
+				printf("File deleted - %s\n", e.key);
+				#endif
+				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			/* File found */
 			} else {
