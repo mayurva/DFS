@@ -430,7 +430,7 @@ void* handle_client_request(void *arg)
 				printf("received readdir request from client\n");
 			#endif
 			while(temp){
-				if (temp->is_deleted == 1) {
+				if (temp->is_deleted == 0) {
 					memcpy(&st,&temp->filestat,sizeof(struct stat));
 					//free_msg(msg);
 					//prepare_msg(READDIR_RESP,&msg,&st,sizeof(struct dirent));
