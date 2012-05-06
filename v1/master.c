@@ -781,14 +781,16 @@ void* client_request_listener(void* ptr){
 	while(1) {
 
 		soc = acceptConnection(client_request_socket);
-		#ifdef DEBUG
-			printf("connected to client id-%d\n", ++id);
-		#endif
-		if (thr_id == MAX_THR) {
-			thr_id = 0;
-		}
-		if((pthread_create(&threads[thr_id++], NULL, handle_client_request, (void*)soc)) != 0) {
-			printf("%s: Failed to create thread to handle client requests %d\n", __func__, thr_id);
+		if(soc != -1){
+			#ifdef DEBUG
+				printf("connected to client id-%d\n", ++id);
+			#endif
+			if (thr_id == MAX_THR) {
+				thr_id = 0;
+			}
+			if((pthread_create(&threads[thr_id++], NULL, handle_client_request, (void*)soc)) != 0) {
+				printf("%s: Failed to create thread to handle client requests %d\n", __func__, thr_id);
+			}
 		}
 	}
 }

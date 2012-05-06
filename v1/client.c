@@ -691,6 +691,7 @@ static int gfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t
 
 	}
 	close(master_soc);
+	return 0;
 }
 
 static int gfs_unlink(const char *path)
