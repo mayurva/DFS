@@ -364,7 +364,7 @@ void* handle_client_request(void *arg)
 				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
 			} else {
-				((file_info*)ep->data)->is_deleted == 1;
+				((file_info*)ep->data)->is_deleted = 1;
 				retval = 0;
 			}
 
