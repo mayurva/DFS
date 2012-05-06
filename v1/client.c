@@ -527,6 +527,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
         	} else {
 			printf("%s: Received write reply from primary chunkserver\n",__func__);
 		}
+		close(chunk_soc);
 
 		/* If Primary chunkserver failed to write data - report failure to client and secondary chunkserver */
 	 	dfsmsg =  msg->msg_iov[0].iov_base;
@@ -561,6 +562,7 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 				printf("%s: Received write reply from secondary chunkserver\n",__func__);
 			}
 			free(data_ptr);
+			close(chunk_soc);
 			return -1;
 		}
 		if((master_soc = createSocket())==-1){
@@ -592,7 +594,6 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	                return -1;
         	}
 		write_size += chunk_size;
-		close(chunk_soc);
 		free_msg(msg);
 		free(data_ptr);
 	}
