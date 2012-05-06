@@ -757,6 +757,7 @@ static struct fuse_operations gfs_oper = {
 	.getattr = (void *)gfs_getattr,
 	//.mknod = (void *)gfs_mknod,
 	.mkdir = (void *)gfs_mkdir,
+	.unlink = (void *)gfs_unlink,
 	.open = (void *)gfs_open,
 	.create = (void *)gfs_create,
 	.read = (void *)gfs_read,
