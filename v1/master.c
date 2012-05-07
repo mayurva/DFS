@@ -314,7 +314,7 @@ void* handle_client_request(void *arg)
 
 			/* File exists */
 			} else {
-				/* File to be created already exists - failure */
+				/* File is being opened */
 				if(open_req_obj->flags & O_CREAT){
 					if ((open_req_obj->flags & O_RDONLY) || (open_req_obj->flags & O_RDWR) || (open_req_obj->flags & O_APPEND)) {
 						#ifdef DEBUG	
@@ -327,6 +327,56 @@ void* handle_client_request(void *arg)
 						#endif
 						retval = -1;
 					}
+				} else if (((file_info*)ep->data)->is_deleted == 1) {
+
+					/* File is being created */
+					if(open_req_obj->flags & O_CREAT) {
+
+						/* Create new object for thus file */
+						file_info *new_file = (file_info*)ep->data;
+						/* Initialize hash table for chunks of this file */
+						new_file->chunk_list = (struct hsearch_data*)calloc(1, sizeof(struct hsearch_data));
+						if (new_file->chunk_list == NULL) {
+							printf("%s : Not enough memory\n", __func__);
+							retval = -1;
+							break;
+						}
+						int retval = hcreate_r(10,new_file->chunk_list);
+						if (retval == 0) {
+							printf("%s : Failed to create file hashtable\n", __func__);
+							retval = -1;
+							break;
+						}
+
+						/* Initialize file stats */
+						strcpy(new_file->file_name,open_req_obj->path);
+						new_file->filestat.st_dev = 0;
+						pthread_mutex_lock(&seq_mutex);
+						new_file->filestat.st_ino = file_inode++;
+						pthread_mutex_unlock(&seq_mutex);
+						new_file->num_of_chunks = 0;
+						new_file->write_in_progress = 0;
+						new_file->filestat.st_mode = 00777;
+						new_file->filestat.st_nlink = 0;
+						new_file->filestat.st_uid = 0;
+						new_file->filestat.st_gid = 0;
+						new_file->filestat.st_rdev = 0;
+						new_file->filestat.st_size = 0;
+						new_file->filestat.st_blksize = CHUNK_SIZE;
+						new_file->filestat.st_blocks = new_file->filestat.st_size/512;
+						gettimeofday(&tv,NULL);
+						new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
+						new_file->next = NULL;
+						new_file->is_deleted = 0;
+
+					} else {
+#ifdef DEBUG	
+						printf("File not found at master\n");
+#endif
+						retval = -1;
+					}
+
+					/* File exists */
 				/* File to to opened is found at master - success */
 				} else {
 					retval = 0;
