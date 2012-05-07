@@ -1,6 +1,6 @@
 #ifndef GFS_H
 #define GFS_H
-#define DEBUG
+//#define DEBUG
 //this file contains common data structures for the overall file system 
 #define MAX_FILENAME (512)
 #define CHUNK_SIZE (4*1024)

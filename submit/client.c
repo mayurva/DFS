@@ -12,7 +12,7 @@
 #include<dirent.h>
 pthread_mutex_t seq_mutex;
 host master;
-#define DEBUG
+//#define DEBUG
 static int gfs_getattr(const char *path, struct stat *stbuf)
 {
 	struct msghdr *msg;

@@ -17,7 +17,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 
-#define DEBUG
+//#define DEBUG
 
 struct hsearch_data *file_list;
 host master;

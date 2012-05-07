@@ -18,7 +18,7 @@ pthread_mutex_t	seq_mutex;
 #define MAX_THR 100
 pthread_t       threads[MAX_THR];
 int thr_id = 0;
-#define DEBUG
+//#define DEBUG
 int chunkserver_init(int argc, char *argv[])
 {
 
