@@ -2,11 +2,12 @@
 #define GFS_H
 #define DEBUG
 //this file contains common data structures for the overall file system 
-#define	MAX_FILENAME	(1024)
-#define CHUNK_SIZE 	(4 * 1024)
+#define MAX_FILENAME (512)
+#define CHUNK_SIZE (4*1024)
 #define MAX_CLIENTS 10
 
 #define MAX_BUF_SZ (CHUNK_SIZE + 1024)
+#define SMALL_BUF (1024)
 #include<sys/types.h>
 #include<sys/socket.h>
 

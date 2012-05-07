@@ -209,8 +209,13 @@ void* handle_client_request(void *arg)
 	struct stat st;	
 
 	open_req *open_req_obj;
-	write_req *write_req_obj;
-	read_req *read_req_obj;
+	char *write_req_obj;
+	char *read_req_obj;
+
+	char *filename;
+	int size;
+	int offset;
+	int chunk_index;
 
 	char * data = (char *) malloc(MAX_BUF_SZ);
 	prepare_msg(0, &msg, data, MAX_BUF_SZ);
@@ -525,90 +530,99 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received read request from client\n");
 			#endif
-			read_req_obj = msg->msg_iov[1].iov_base;
-			e.key = read_req_obj->filename;
-
-			/* File not found */
-			if(hsearch_r(e,FIND,&ep,file_list) == 0) {
-				#ifdef DEBUG
-				printf("File not present\n");
-				#endif
-				retval = -ENOENT;
-			} else if (((file_info*)ep->data)->is_deleted == 1) {
-				#ifdef DEBUG
-				printf("File deleted - %s\n", e.key);
-				#endif
-				msg->msg_iov[1].iov_len = 0;
-				retval = -ENOENT;
-			/* File found */
-			} else {
-				/* TODO : check if the read size of within the chunk size.. current size variable must be maintained within chunk_info */
-				if(((file_info*)ep->data)->num_of_chunks <= read_req_obj->chunk_index){
+				
+				read_req_obj = msg->msg_iov[1].iov_base;
+				filename = strtok(read_req_obj,":");
+				chunk_index = atoi(strtok(NULL,":"));
+				offset = atoi(strtok(NULL,":"));
+				size = atoi(strtok(NULL,":"));
+				e.key = filename;
+	
+				/* File not found */
+				if(hsearch_r(e,FIND,&ep,file_list) == 0) {
 					#ifdef DEBUG
-					printf("Read error - no data available - no. of chunks = %d requested index = %d\n",
-					((file_info*)ep->data)->num_of_chunks, read_req_obj->chunk_index);
+						printf("File not present\n");
 					#endif
 					retval = -ENOENT;
+				} else if (((file_info*)ep->data)->is_deleted == 1) {
+					#ifdef DEBUG
+						printf("File deleted - %s\n", e.key);
+					#endif
+					msg->msg_iov[1].iov_len = 0;
+					retval = -ENOENT;
+				/* File found */
 				} else {
-
-					/* Prepare chunk object */	
-					char temp[10];
-					sprintf(temp, "%d", read_req_obj->chunk_index);
-					e.key = temp;
-
-					/* Chunk not found in hashtable */
-					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
+					/* TODO : check if the read size of within the chunk size.. current size variable must be maintained within chunk_info */
+					if(((file_info*)ep->data)->num_of_chunks <= chunk_index){
 						#ifdef DEBUG
-						printf("Read error - chunk does not exist\n");
+							printf("Read error - no data available - no. of chunks = %d requested index = %d\n",
+							((file_info*)ep->data)->num_of_chunks, chunk_index);
 						#endif
-						retval = -ENODATA;
-					/* Chunk found in hashtable */
+						retval = -ENOENT;
 					} else {
-						chunk_info *c = (chunk_info*)ep_temp->data;
-						if (read_req_obj->offset >= c->chunk_size) {
+	
+						/* Prepare chunk object */	
+						char temp[10];
+						sprintf(temp, "%d", chunk_index);
+						e.key = temp;
+	
+						/* Chunk not found in hashtable */
+						if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
 							#ifdef DEBUG
-							printf("Read error - data does not exist\n");
+								printf("Read error - chunk does not exist\n");
 							#endif
 							retval = -ENODATA;
-							break;
+						/* Chunk found in hashtable */
+						} else {
+							chunk_info *c = (chunk_info*)ep_temp->data;
+							if (offset >= c->chunk_size) {
+								#ifdef DEBUG
+									printf("Read error - data does not exist\n");
+								#endif
+								retval = -ENODATA;
+								break;
+							}
+							char *resp = (char*) malloc(SMALL_BUF);
+							c->last_read = (c->last_read + 1) % 2;	
+							/* Prepare response */
+							sprintf(resp,"%s:%d:%s:",chunk_servers[c->chunkserver_id[c->last_read]].ip_addr,chunk_servers[c->chunkserver_id[c->last_read]].client_port,c->chunk_handle);
+							msg->msg_iov[1].iov_base = resp;
+							msg->msg_iov[1].iov_len = strlen(resp)+1;
+							retval = 0;
 						}
-						read_resp * resp = (read_resp*) malloc(sizeof(read_resp));
-						c->last_read = (c->last_read + 1) % 2;	
-						/* Prepare response */
-						strcpy(resp->ip_address, chunk_servers[c->chunkserver_id[c->last_read]].ip_addr);
-						resp->port = chunk_servers[c->chunkserver_id[c->last_read]].client_port;
-						strcpy(resp->chunk_handle, c->chunk_handle);
-						msg->msg_iov[1].iov_base = resp;
-						msg->msg_iov[1].iov_len = sizeof(read_resp);
-						retval = 0;
 					}
+	
 				}
-
-			}
-
-			/* Send reply to client */
-			dfsmsg->status = retval;
-			dfsmsg->msg_type = READ_RESP;
-			sendmsg(soc, msg, 0);
-			free_msg(msg);
+	
+				/* Send reply to client */
+				dfsmsg->status = retval;
+				dfsmsg->msg_type = READ_RESP;
+				sendmsg(soc, msg, 0);
+				free_msg(msg);
+			
 			break;
 
 		case WRITE_REQ:
+			
 			#ifdef DEBUG
 				printf("received write request from client\n");
 			#endif
 			write_req_obj = msg->msg_iov[1].iov_base;
-			e.key = write_req_obj->filename;
+			filename = strtok(write_req_obj,":");
+			chunk_index = atoi(strtok(NULL,":"));
+			offset = atoi(strtok(NULL,":"));
+			size = atoi(strtok(NULL,":"));
+			e.key = filename;
 
-			/* File not found */
+				/* File not found */
 			if(hsearch_r(e,FIND,&ep,file_list) == 0){
 				#ifdef DEBUG
-				printf("File not present\n");
+					printf("File not present\n");
 				#endif
 				retval = -ENOENT;
 			} else if (((file_info*)ep->data)->write_in_progress == 1) {
 				#ifdef DEBUG
-				printf("Write in progress - %s\n", e.key);
+					printf("Write in progress - %s\n", e.key);
 				#endif
 				msg->msg_iov[1].iov_len = 0;
 				retval = -ENOENT;
@@ -624,7 +638,7 @@ void* handle_client_request(void *arg)
 				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
 				          Also, a current size variable must be maintained within chunk_info */
 				if ((((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
-						(((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
+						(((file_info*)ep->data)->num_of_chunks == chunk_index) && (offset == 0)) ) {
 
 					/* Prepare chunk object */	
 					pthread_mutex_lock(&seq_mutex);
@@ -634,7 +648,7 @@ void* handle_client_request(void *arg)
 					chunk_info *c = (chunk_info*)malloc(sizeof(chunk_info));
 					sprintf(c->chunk_handle, "%d", chunk_id);
 					char * temp = (char*)malloc(10);
-					sprintf(temp, "%d", write_req_obj->chunk_index);
+					sprintf(temp, "%d", chunk_index);
 					e.key = temp;
 
 					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
@@ -658,31 +672,28 @@ void* handle_client_request(void *arg)
 					add_tochunklist(c,1);
 
 					/* TODO: Commit the chunk only when write-done message is received from client */
-					//c->chunk_size = write_req_obj->size;
+					//c->chunk_size = size;
 
 					/* Enter into hashtable */
 					e.data = c;
 					//((file_info*)ep->data)->num_of_chunks++;
-					//((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+					//((file_info*)ep->data)->filestat.st_size += size;
 					hsearch_r(e,ENTER,&ep_temp,((file_info*)ep->data)->chunk_list);
 
 					/* Prepare response */
-					write_resp * resp = (write_resp*) malloc(sizeof(write_resp));
-					strcpy(resp->ip_address_primary, chunk_servers[c->chunkserver_id[0]].ip_addr);
-					resp->port_primary = chunk_servers[c->chunkserver_id[0]].client_port;
-					strcpy(resp->ip_address_secondary, chunk_servers[c->chunkserver_id[1]].ip_addr);
-					resp->port_secondary = chunk_servers[c->chunkserver_id[1]].client_port;
-					strcpy(resp->chunk_handle, c->chunk_handle);
+					char * resp = (char*) malloc(SMALL_BUF);
+					sprintf(resp,"%s:%d:%s:%d:%s:",chunk_servers[c->chunkserver_id[0]].ip_addr,chunk_servers[c->chunkserver_id[0]].client_port,chunk_servers[c->chunkserver_id[1]].ip_addr,chunk_servers[c->chunkserver_id[1]].client_port,c->chunk_handle);
+					printf("response is %s\n",resp);
 					msg->msg_iov[1].iov_base = resp;
-					msg->msg_iov[1].iov_len = sizeof(write_resp);
+					msg->msg_iov[1].iov_len = strlen(resp)+1;
 
 					retval = 0;
 
-			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
-						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
+			      } else if ((((((file_info*)ep->data)->num_of_chunks-1) == chunk_index) &&
+						      ((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == offset))) {
 
 						char temp[10];
-						sprintf(temp, "%d", write_req_obj->chunk_index);
+						sprintf(temp, "%d", chunk_index);
 						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
@@ -699,19 +710,16 @@ void* handle_client_request(void *arg)
 						chunk_info *c = (chunk_info*)ep_temp->data;
 
 						/* TODO: Commit the chunk only when write-done message is received from client */
-						//c->chunk_size += write_req_obj->size;
-						//((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						//c->chunk_size += size;
+						//((file_info*)ep->data)->filestat.st_size += size;
 
 						/* Prepare response */
-						write_resp * resp = (write_resp*) malloc(sizeof(write_resp));
-						strcpy(resp->ip_address_primary, chunk_servers[c->chunkserver_id[0]].ip_addr);
-						resp->port_primary = chunk_servers[c->chunkserver_id[0]].client_port;
-						strcpy(resp->ip_address_secondary, chunk_servers[c->chunkserver_id[1]].ip_addr);
-						resp->port_secondary = chunk_servers[c->chunkserver_id[1]].client_port;
-						strcpy(resp->chunk_handle, c->chunk_handle);
+						char * resp = (char*) malloc(SMALL_BUF);
+						sprintf(resp,"%s:%d:%s:%d:%s:",chunk_servers[c->chunkserver_id[0]].ip_addr,chunk_servers[c->chunkserver_id[0]].client_port,chunk_servers[c->chunkserver_id[1]].ip_addr,chunk_servers[c->chunkserver_id[1]].client_port,c->chunk_handle);
+						printf("response is %s\n",resp);
 						msg->msg_iov[1].iov_base = resp;
-						msg->msg_iov[1].iov_len = sizeof(write_resp);
-
+						msg->msg_iov[1].iov_len = strlen(resp)+1;
+			
 						retval = 0;
 					}
 				} else {
@@ -735,7 +743,11 @@ void* handle_client_request(void *arg)
 				printf("received write commit request from client\n");
 			#endif
 			write_req_obj = msg->msg_iov[1].iov_base;
-			e.key = write_req_obj->filename;
+			filename = strtok(write_req_obj,":");
+			chunk_index = atoi(strtok(NULL,":"));
+			offset = atoi(strtok(NULL,":"));
+			size = atoi(strtok(NULL,":"));
+			e.key = filename;
 
 			/* File not found */
 			if(hsearch_r(e,FIND,&ep,file_list) == 0){
@@ -755,10 +767,10 @@ void* handle_client_request(void *arg)
 				/* TODO : Allow append operation within the same chunk - in this case no need to create a new chunk
 				          Also, a current size variable must be maintained within chunk_info */
                               if (    (((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == 0) &&
-                                      (((file_info*)ep->data)->num_of_chunks == write_req_obj->chunk_index) && (write_req_obj->offset == 0)) ) {
+                                      (((file_info*)ep->data)->num_of_chunks == chunk_index) && (offset == 0)) ) {
 
 						char temp[10];
-						sprintf(temp, "%d", write_req_obj->chunk_index);
+						sprintf(temp, "%d", chunk_index);
 						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
@@ -769,19 +781,19 @@ void* handle_client_request(void *arg)
 					} else {
 						/* Chunk found in hashtable */
 						((file_info*)ep->data)->num_of_chunks++;
-						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						((file_info*)ep->data)->filestat.st_size += size;
 						chunk_info *c = (chunk_info*)ep_temp->data;
-						c->chunk_size = write_req_obj->size;
+						c->chunk_size = size;
 						pthread_mutex_lock(&seq_mutex);
 						((file_info*)ep->data)->write_in_progress = 0;
 						pthread_mutex_unlock(&seq_mutex);
 						retval = 0;
 					}
-				} else if ((((((file_info*)ep->data)->num_of_chunks-1) == write_req_obj->chunk_index) &&
-							((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == write_req_obj->offset))) {
+				} else if ((((((file_info*)ep->data)->num_of_chunks-1) == chunk_index) &&
+							((((file_info*)ep->data)->filestat.st_size % CHUNK_SIZE) == offset))) {
 
 						char temp[10];
-						sprintf(temp, "%d", write_req_obj->chunk_index);
+						sprintf(temp, "%d", chunk_index);
 						e.key = temp;
 					/* Chunk not found in hashtable */
 					if (hsearch_r(e, FIND, &ep_temp, ((file_info*)ep->data)->chunk_list) == 0) {
@@ -792,8 +804,8 @@ void* handle_client_request(void *arg)
 					/* Chunk found in hashtable */
 					} else {
 						chunk_info *c = (chunk_info*)ep_temp->data;
-						c->chunk_size += write_req_obj->size;
-						((file_info*)ep->data)->filestat.st_size += write_req_obj->size;
+						c->chunk_size += size;
+						((file_info*)ep->data)->filestat.st_size += size;
 						pthread_mutex_lock(&seq_mutex);
 						((file_info*)ep->data)->write_in_progress = 0;
 						pthread_mutex_unlock(&seq_mutex);

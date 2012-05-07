@@ -130,15 +130,19 @@ int main(int argc, char * argv[])
         return 0;
 }
 
-int chunk_read(read_data_req * req, read_data_resp *resp)
+int chunk_read(char *req, char* resp)
 {
 	char	path[256];
-	
+	char *p = strtok(req,":");
+	int offset = atoi(strtok(NULL,":"));
+	int size = atoi(strtok(NULL,":"));
+	char buf[CHUNK_SIZE+10];
+
 	strcpy(path, chunk_path);
-	strcat(path, req->chunk_handle);
+	strcat(path, p);
 
 	#ifdef DEBUG
-	printf("opening chunk for read- %s req_size = %d req_offset = %d\n", path, req->size, req->offset);
+		printf("opening chunk for read- %s req_size = %d req_offset = %d\n", path,size, offset);
 	#endif
 	FILE * chunk_fd = fopen(path, "r");
 	if (chunk_fd == NULL) {
@@ -152,8 +156,8 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	#endif
 	}
 
-	fseek(chunk_fd, req->offset, SEEK_SET);
-	size_t retval = fread(resp->chunk, 1, req->size, chunk_fd);
+	fseek(chunk_fd, offset, SEEK_SET);
+	size_t retval = fread(buf, 1, size, chunk_fd);
 	if (retval == 0) {
 	#ifdef DEBUG
 		printf("failure: chunkfile not read\n");
@@ -163,27 +167,32 @@ int chunk_read(read_data_req * req, read_data_resp *resp)
 	#ifdef DEBUG
 		printf("Read chunkfile- %s\n", path);
 		int i;
-		for (i = 0; i < req->size; i++)
-			printf("%c", resp->chunk[i]);
+		for (i = 0; i < size; i++)
+			printf("%c", buf[i]);
 		printf("\n");
 	#endif
-		resp->size = retval;
+		size = retval;
+		sprintf(resp,"%d:%s",size,buf);
 	}
 	return 0; 
 }
 
 
-int chunk_write(write_data_req *req)
+int chunk_write(char *req)
 {
 	char	path[256];
-	
+	char *q;
+	char *p = strtok_r(req,":",&q);
+	int offset = atoi(strtok_r(NULL,":",&q));
+	int size = atoi(strtok_r(NULL,":",&q));
+
 	#ifdef DEBUG
-	printf("opening chunk for write- %s req_size = %d req_offset = %d\n", &(req->chunk[CHUNK_SIZE]), req->size, req->offset);
+		printf("opening chunk for write- %s req_size = %d req_offset = %d\n", p, size, offset);
 	#endif
 	strcpy(path, chunk_path);
-	strcat(path, &(req->chunk[CHUNK_SIZE]));
+	strcat(path, p);
 	#ifdef DEBUG
-	printf("creating chunk for write - %s\n", path);
+		printf("creating chunk for write - %s\n", path);
 	#endif
 
 	FILE * chunk_fd = fopen(path, "a");
@@ -200,13 +209,13 @@ int chunk_write(write_data_req *req)
 	
 	#ifdef DEBUG
 	int i;
-	for (i = 0; i < req->size; i++)
-		printf("%c", req->chunk[i]);
+	for (i = 0; i < size; i++)
+		printf("%c", q[i]);
 	printf("\n");
 	#endif
 
 	//fseek(chunk_fd, req->offset, SEEK_SET);
-	size_t retval = fwrite(req->chunk, req->size, 1, chunk_fd);
+	size_t retval = fwrite(q,size, 1, chunk_fd);
 	fclose(chunk_fd);
 	if (retval != 1) {
 	#ifdef DEBUG
@@ -221,17 +230,20 @@ int chunk_write(write_data_req *req)
 	return 0; 
 }
 
-int chunk_truncate(write_data_req *req)
+int chunk_truncate(char *req)
 {
 	char	path[256];
+	char *p = strtok(req,":");
+	int offset = atoi(strtok(NULL,":"));
+	int size = atoi(strtok(NULL,":"));
 	
 	strcpy(path, chunk_path);
-	strcat(path, &(req->chunk[CHUNK_SIZE]));
+	strcat(path, p);
 	#ifdef DEBUG
-	printf("truncating chunk - %s to offset - %d\n", path, req->offset);
+	printf("truncating chunk - %s to offset - %d\n", path, offset);
 	#endif
 
-	int retval = truncate(path, req->offset);
+	int retval = truncate(path, offset);
 	if (retval != 0) {
 	#ifdef DEBUG
 		printf("cannot truncate chunk file- %s\n", path);
@@ -252,7 +264,7 @@ void* handle_client_request(void *arg)
         int soc = (int)arg;
         char * data = (char *) malloc(MAX_BUF_SZ);
         prepare_msg(0, &msg, data, MAX_BUF_SZ);
-	read_data_resp * resp;
+	char * resp;
 	dfs_msg *dfsmsg;
 
         int retval = recvmsg(soc, msg, 0);
@@ -275,10 +287,10 @@ void* handle_client_request(void *arg)
                         break;
 
                 case READ_DATA_REQ:
-			resp = (read_data_resp*) malloc(sizeof(read_data_resp));
+			resp = (char*) malloc(sizeof(char)*MAX_BUF_SZ);
 			dfsmsg->status = chunk_read(msg->msg_iov[1].iov_base, resp);
 			msg->msg_iov[1].iov_base = resp;
-			msg->msg_iov[1].iov_len = sizeof(read_data_resp);
+			msg->msg_iov[1].iov_len = strlen(resp)+1;
 			dfsmsg->msg_type = READ_DATA_RESP;
 			retval = sendmsg(soc, msg, 0); 
 			if (retval == -1) {

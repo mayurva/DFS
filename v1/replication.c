@@ -39,23 +39,25 @@ int add_tochunklist(chunk_info *chunk_ptr,int index)
 int write_block(int cs_id,chunk_info *chunk,char *chunk_data)
 {
 	int sock = createSocket();
-	write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
-        memcpy(data_ptr->chunk,chunk_data,chunk->chunk_size);
-        memcpy(&(data_ptr->chunk[CHUNK_SIZE]),chunk->chunk_handle,64);
-	data_ptr->size = chunk->chunk_size;
-	data_ptr->offset = 0;
+	char *data_ptr = (char*) malloc (MAX_BUF_SZ);
+
+	memset(data_ptr,0,MAX_BUF_SZ);
+	sprintf(data_ptr,"%s:%d:%d:",chunk->chunk_handle,0,chunk->chunk_size);
+	int len = strlen(data_ptr);
+	memcpy(data_ptr+len,chunk_data,chunk->chunk_size);
+
 	#ifdef DEBUG1
 		int i;
 		printf("Data to be written is - \n");
-		for (i = 0; i < CHUNK_SIZE+64; i++) 
-			printf("%c", data_ptr->chunk[i]);
+		for (i = 0; i < CHUNK_SIZE; i++) 
+			printf("%c", ((char*)data_ptr+len)[i]);
 //		printf("\nhandle - %s\n", data_ptr->chunk+CHUNK_SIZE);
 		printf("\n");
 	#endif
 	//pthread_mutex_lock(&msg_mutex);
 
 		free_msg(msg);
-		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, sizeof(write_data_req));
+		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, strlen(data_ptr));
 		print_msg(msg->msg_iov[0].iov_base);
 
 		/* Send write-data request to secondary chunkserver */
@@ -92,19 +94,17 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
 {
 //	printf("aat \n");
 	int size_read=0;
-	char *buf = (char*)malloc((CHUNK_SIZE+100)*sizeof(char));
+	char *buf;// = (char*)malloc((CHUNK_SIZE+100)*sizeof(char));
 	dfs_msg *dfsmsg;
-	read_data_req *data_ptr = (read_data_req*)malloc(sizeof(read_data_req));
+	char *data_ptr = (char*)malloc(MAX_BUF_SZ);
 	//*chunk_data = malloc((CHUNK_SIZE)*sizeof(char));
 //	free_msg(msg);
-	strcpy(data_ptr->chunk_handle,chunk->chunk_handle);
-	data_ptr->size = chunk->chunk_size;
-	data_ptr->offset = 0;
+	sprintf(data_ptr,"%s:%d:%d:",chunk->chunk_handle,0,chunk->chunk_size);
 	#ifdef DEBUG
 //		print_msg(msg->msg_iov[0].iov_base);
-		printf("beginning of read %s\n",data_ptr->chunk_handle);
+		printf("beginning of read %s\n",chunk->chunk_handle);
 	#endif
-	prepare_msg(READ_DATA_REQ, &msg, data_ptr, sizeof(read_data_req));
+	prepare_msg(READ_DATA_REQ, &msg, data_ptr, strlen(data_ptr));
 	print_msg(msg->msg_iov[0].iov_base);
 
 	int sock = createSocket();
@@ -127,7 +127,7 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
 
 		/* Receive read-data reply from chunkserver */
 		free_msg(msg);
-		read_data_resp *resp = (read_data_resp*) malloc(sizeof(read_data_resp));
+		char *resp = (char*) malloc(MAX_BUF_SZ);
 		prepare_msg(READ_DATA_RESP, &msg, resp, sizeof(read_data_resp));
 		
         	if((recvmsg(sock,msg,0))==-1){
@@ -138,23 +138,22 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
 		}
 //	pthread_mutex_unlock(&msg_mutex);
 		/*TODO: process received data */
-       	dfsmsg =  msg->msg_iov[0].iov_base;
-	resp = msg->msg_iov[1].iov_base;
-	if(dfsmsg->status == 0) {
-		/* Update number of bytes read */
-		size_read += resp->size;
+	       	dfsmsg =  msg->msg_iov[0].iov_base;
 		resp = msg->msg_iov[1].iov_base;
-		memcpy(buf, resp->chunk, CHUNK_SIZE); 
-		#ifdef DEBUG1
-			int i;
-			printf("Data read is - \n");
-			for (i = 0; i < resp->size; i++) 
-				printf("%c", buf[i]);
-			printf("\n");
-		#endif
-		*chunk_data = buf;
-		return size_read;
-	}
+		if(dfsmsg->status == 0) {
+		/* Update number of bytes read */
+			int size = atoi(strtok_r(resp,":",&buf));
+			size_read += size;
+			#ifdef DEBUG1
+				int i;
+				printf("Data read is - \n");
+				for (i = 0; i < resp->size; i++) 
+					printf("%c", buf[i]);
+				printf("\n");
+			#endif
+			*chunk_data = buf;
+			return size_read;
+		}
 	close(sock);
 	return -1;
 }

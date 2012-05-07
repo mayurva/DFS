@@ -136,7 +136,7 @@ static int gfs_mkdir(const char *path, mode_t mode)
         dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
         if(dfsmsg->status != 0){
                 return dfsmsg->status;
-        }
+	}
         return 0;
 }
 
@@ -229,6 +229,9 @@ static int gfs_open(const char *path, struct fuse_file_info *fi)
 
 static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("Inside Read\n");
+	#endif
 	struct msghdr *msg;
 	int master_soc;
 	int chunk_soc;
@@ -236,18 +239,19 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 	int ret;
 	int i;
 	int curr_offset;
-	read_req read_ptr;
-	read_data_req data_ptr;
+	char read_ptr[SMALL_BUF];
+	char *data_ptr = (char*)malloc(sizeof(char)*SMALL_BUF);
 	char chunk_handle[64];
 	dfs_msg *dfsmsg;
 	size_t size_read = 0;
 	int chunk_size, chunk_offset;
+	char *resp = (char*) malloc(sizeof(char)*MAX_BUF_SZ);
 
 	int start_block = offset/CHUNK_SIZE;
 	int last_block = (offset+size-1)/CHUNK_SIZE;
 	
 	#ifdef DEBUG
-	printf("start block = %d last block = %d size = %u offset = %llu\n", start_block, last_block, size, offset);
+		printf("start block = %d last block = %d size = %u offset = %llu\n", start_block, last_block, size, offset);
 	#endif
 
 	for(i=start_block;i<=last_block;i++) {
@@ -276,8 +280,8 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		} else {
 			chunk_size = size - size_read;
 		}
-		create_read_req(&read_ptr,path,i, chunk_offset, chunk_size);
-		prepare_msg(READ_REQ, &msg, &read_ptr, sizeof(read_req));
+		create_read_req(read_ptr,path,i, chunk_offset, chunk_size);
+		prepare_msg(READ_REQ, &msg, read_ptr, SMALL_BUF);
 		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
@@ -287,7 +291,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
         	/* reply from master - chunk metadata and location info */
         	if((recvmsg(master_soc,msg,0))==-1){
                 	printf("%s: message receipt failed\n",__func__);
-	                return -1;
+			return -1;
         	} else {
 			dfsmsg =  msg->msg_iov[0].iov_base;
 			/* No metadata for this chunk */
@@ -297,9 +301,14 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		close(master_soc);
 
 		/* extract chunkserver details */
-		strcpy(chunk_server.ip_addr,((read_resp*)dfsmsg -> data) ->ip_address);
+		strcpy(resp,msg->msg_iov[1].iov_base);
+		printf("Read response is %s\n",resp);
+		strcpy(chunk_server.ip_addr,strtok(resp,":"));	
+		chunk_server.port = atoi(strtok(NULL,":"));
+		strcpy(chunk_handle,strtok(NULL,":"));
+		/*strcpy(chunk_server.ip_addr,((read_resp*)dfsmsg -> data) ->ip_address);
 		chunk_server.port = ((read_resp*)dfsmsg->data) ->port;
-		strcpy(chunk_handle,((read_resp*)dfsmsg->data) ->chunk_handle);
+		strcpy(chunk_handle,((read_resp*)dfsmsg->data) ->chunk_handle);*/
 
 		/* conect to the chunk server */
 	        if((chunk_soc = createSocket())==-1){
@@ -311,9 +320,9 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 			return -1;
 		}
 		/* Preapare read-data request */
-		create_read_data_req(&data_ptr,chunk_handle, chunk_offset, chunk_size);
+		create_read_data_req(data_ptr,chunk_handle, chunk_offset, chunk_size);
 		free_msg(msg);
-		prepare_msg(READ_DATA_REQ, &msg, &data_ptr, sizeof(read_data_req));
+		prepare_msg(READ_DATA_REQ, &msg, data_ptr, strlen(data_ptr));
 		print_msg(msg->msg_iov[0].iov_base);
 
 		/* Send read-data request to chunkserver */
@@ -326,8 +335,7 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 
         	/* Receive read-data reply from chunkserver */
 		free_msg(msg);
-		read_data_resp * resp = (read_data_resp*) malloc(sizeof(read_data_resp));
-		prepare_msg(READ_DATA_RESP, &msg, resp, sizeof(read_data_resp));
+		prepare_msg(READ_DATA_RESP, &msg, resp, MAX_BUF_SZ);
         	if((recvmsg(chunk_soc,msg,0))==-1){
                 	printf("%s: read reply from chunkserver failed\n",__func__);
 			free(resp);
@@ -339,29 +347,32 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 		/*TODO: process received data */
         	dfsmsg =  msg->msg_iov[0].iov_base;
 		if(dfsmsg->status == 0) {
+			char *q;
+			int size; 
 			/* Update number of bytes read */
 			resp = msg->msg_iov[1].iov_base;
-			memcpy(buf+size_read, resp->chunk, resp->size); 
+			size = atoi(strtok_r(resp,":",&q));
+			memcpy(buf+size_read, q, size); 
 			#ifdef DEBUG
-			int j;
-			printf("Data read is - \n");
-			for (j = 0; j < CHUNK_SIZE; j++) 
-				printf("%c", buf[j+size_read]);
-			printf("\n");
+				int j;
+				printf("Data read is - \n");
+				for (j = 0; j < CHUNK_SIZE; j++) 
+					printf("%c", buf[j+size_read]);
+				printf("\n");
 			#endif
-			size_read += resp->size;
-			if (resp->size < chunk_size) {
+			size_read += size;
+			if (size < chunk_size) {
 				break;
 			}
 		}
-		free(resp);
 		free_msg(msg);
 		close(chunk_soc);
 	}
 
+	free(resp);
 	/* Return number of bytes written */
 	#ifdef DEBUG
-	printf("No. of bytes Read successfully - %d\n", size_read);
+		printf("No. of bytes Read successfully - %d\n", size_read);
 	#endif
 	return size_read;
 
@@ -369,12 +380,16 @@ static int gfs_read(const char *path, char *buf, size_t size, off_t offset,struc
 
 static int gfs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("Inside Write\n");
+	#endif
 	struct msghdr *msg;
 	int master_soc;
         int ret;
 	int i;
 	int chunk_soc;
-	write_req write_ptr;
+	char write_ptr[SMALL_BUF];
+	char *resp = (char*)malloc(SMALL_BUF*sizeof(char));
 	host chunk_server[2];
 	char chunk_handle[64];
 	size_t write_size = 0;	
@@ -404,9 +419,9 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		} else {
 			chunk_size = size - write_size;
 		}
-		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
-		prepare_msg(WRITE_REQ, &msg, &write_ptr, sizeof(write_req));
-		print_msg(msg->msg_iov[0].iov_base);
+		create_write_req(write_ptr, path, i, chunk_offset, chunk_size);
+		prepare_msg(WRITE_REQ, &msg, write_ptr, SMALL_BUF);
+//		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
 	                return -1;
@@ -418,22 +433,25 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 	                return -1;
         	}
 		close(master_soc);
-
 		/* Extract primary and secondary chunkserver details */
 	 	dfs_msg *dfsmsg =  msg->msg_iov[0].iov_base;
 		if (dfsmsg->status != 0) {
                 	printf("%s: Error creating chunk on master\n",__func__);
 	                return -1;
         	}
-		write_resp * resp = msg->msg_iov[1].iov_base;
-		strcpy(chunk_server[0].ip_addr,resp->ip_address_primary);
-		chunk_server[0].port = resp->port_primary;
-		strcpy(chunk_server[1].ip_addr,resp->ip_address_secondary);
-		chunk_server[1].port = resp->port_secondary;
-		strcpy(chunk_handle, resp->chunk_handle);
+		printf("before response\n");
+		strcpy(resp,msg->msg_iov[1].iov_base);	
+		#ifdef DEBUG
+			printf("response is %s\n",resp); 
+		#endif
+		strcpy(chunk_server[0].ip_addr,strtok(resp,":"));
+		chunk_server[0].port = atoi(strtok(NULL,":"));
+		strcpy(chunk_server[1].ip_addr,strtok(NULL,":"));
+		chunk_server[1].port = atoi(strtok(NULL,":"));
+		strcpy(chunk_handle, strtok(NULL,":"));
 		#ifdef DEBUG	
-		printf("Write response - primary-%s:%d secondary-%s:%d chunkhandle-%s\n", 
-		resp->ip_address_primary, resp->port_primary, resp->ip_address_secondary, resp->port_secondary, resp->chunk_handle);	
+			printf("Write response - primary-%s:%d secondary-%s:%d chunkhandle-%s\n", 
+			chunk_server[0].ip_addr, chunk_server[0].port, chunk_server[1].ip_addr, chunk_server[1].port, chunk_handle);	
 		#endif
 
 		/* Create connection with secondary chunkserver */
@@ -448,19 +466,22 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		}
 
 		/* Prepare write data request */
-		write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
-		create_write_data_req(data_ptr, resp->chunk_handle, buf+ write_size, chunk_offset, chunk_size);
+		//write_data_req *data_ptr = (write_data_req*) malloc (sizeof(write_data_req));
+		char *data_ptr = (char*)malloc(sizeof(char)*MAX_BUF_SZ);
+		create_write_data_req(data_ptr, chunk_handle, buf+ write_size, chunk_offset, chunk_size);
+		
 		#ifdef DEBUG
 		int j;
 		printf("Data to be written is - \n");
-		for (j = 0; j < CHUNK_SIZE+64; j++) 
-			printf("%c", data_ptr->chunk[j]);
+		for (j = 0; j < strlen(data_ptr); j++) 
+			printf("%c", data_ptr[j]);
 //		printf("\nhandle - %s\n", data_ptr->chunk+CHUNK_SIZE);
 		printf("\n");
 		#endif
 		free_msg(msg);
-		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, sizeof(write_data_req));
+		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, strlen(data_ptr)+1);
 		print_msg(msg->msg_iov[0].iov_base);
+
 
 		/* Send write-data request to secondary chunkserver */
 		if((sendmsg(chunk_soc,msg,0))==-1){
@@ -507,8 +528,9 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		}
 
 		/* Send write-data to primary chunkserver */
+		create_write_data_req(data_ptr, chunk_handle, buf+ write_size, chunk_offset, chunk_size);
 		free_msg(msg);
-		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, sizeof(write_data_req));
+		prepare_msg(WRITE_DATA_REQ, &msg, data_ptr, strlen(data_ptr)+1);
 		if((sendmsg(chunk_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
 			free_msg(msg);
@@ -574,8 +596,8 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 			printf("%s: can not connect to the master server\n",__func__);
 			return -1;
 		}
-		create_write_req(&write_ptr, path, i, chunk_offset, chunk_size);
-		prepare_msg(WRITE_COMMIT_REQ, &msg, &write_ptr, sizeof(write_req));
+		create_write_req(write_ptr, path, i, chunk_offset, chunk_size);
+		prepare_msg(WRITE_COMMIT_REQ, &msg, write_ptr, strlen(write_ptr));
 		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
