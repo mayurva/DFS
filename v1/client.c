@@ -419,11 +419,8 @@ static int gfs_write(const char *path, const char *buf, size_t size,off_t offset
 		} else {
 			chunk_size = size - write_size;
 		}
-		printf("ithe\n");
 		create_write_req(write_ptr, path, i, chunk_offset, chunk_size);
-		printf("mag\n");
 		prepare_msg(WRITE_REQ, &msg, write_ptr, SMALL_BUF);
-		printf("khali\n");
 //		print_msg(msg->msg_iov[0].iov_base);
 		if((sendmsg(master_soc,msg,0))==-1){
                 	printf("%s: message sending failed\n",__func__);
