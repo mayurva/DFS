@@ -20,39 +20,32 @@ int create_open_req(open_req *ptr, char *path, int flags)
 	return 0;
 }
 
-int create_read_req(read_req *ptr,char *path, int chunk_index, int offset, int size)
+int create_read_req(char *ptr,char *path, int chunk_index, int offset, int size)
 {
-	strcpy(ptr->filename,path);
-	ptr->chunk_index = chunk_index;
-	ptr->offset = offset;
-	ptr->size = size;
+	sprintf(ptr,"%s:%d:%d:%d:",path,chunk_index,offset,size);
 	return 0;
 }
 
-int create_read_data_req(read_data_req *ptr,char *chunk_handle, int offset, int size)
+int create_read_data_req(char *ptr,char *chunk_handle, int offset, int size)
 {
-	strcpy(ptr->chunk_handle,chunk_handle);
-	ptr->offset = offset;
-	ptr->size = size;
+	sprintf(ptr,"%s:%d:%d:",chunk_handle,offset,size);
 	return 0;
 }
 
-int create_write_req(write_req *ptr,char *path, int chunk_index, int offset, int size)
+int create_write_req(char *ptr,char *path, int chunk_index, int offset, int size)
 {
-	strcpy(ptr->filename,path);
-	ptr->chunk_index = chunk_index;
-	ptr->offset = offset;
-	ptr->size = size;
+	sprintf(ptr,"%s:%d:%d:%d:",path,chunk_index,offset,size);
 	return 0;
 }
 
-int create_write_data_req(write_data_req *ptr, char *chunk_handle, char *buf, int offset, int size)
+int create_write_data_req(char *ptr, char *chunk_handle, char *buf, int offset, int size)
 {
+	int len;
 	printf("chunk handle %s\n",chunk_handle);
-	memcpy(ptr->chunk,buf, size);
-	memcpy(&(ptr->chunk[CHUNK_SIZE]),chunk_handle,64);
-	ptr->offset = offset;
-	ptr->size = size;
+	memset(ptr,0,MAX_BUF_SZ);
+	sprintf(ptr,"%s:%d:%d:",chunk_handle,offset,size);
+	len = strlen(ptr);
+	memcpy(ptr+len,buf,size);
 	return 0;
 }
 
