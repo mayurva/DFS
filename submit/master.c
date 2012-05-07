@@ -218,7 +218,9 @@ void* handle_client_request(void *arg)
 	int chunk_index;
 
 	char * data = (char *) malloc(MAX_BUF_SZ);
+	pthread_mutex_lock(&seq_mutex);
 	prepare_msg(0, &msg, data, MAX_BUF_SZ);
+	pthread_mutex_unlock(&seq_mutex);
 	recvmsg(soc, msg, 0);
 
 	dfs_msg *dfsmsg;
@@ -233,7 +235,9 @@ void* handle_client_request(void *arg)
 			#ifdef DEBUG
 			printf("received create request from client\n");
 			#endif
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			break;
 
 		case OPEN_REQ:
@@ -393,7 +397,9 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = OPEN_RESP;
 			sendmsg(soc, msg, 0);
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			break;
 
 		case UNLINK_REQ:
@@ -428,7 +434,9 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = UNLINK_RESP;
 			sendmsg(soc, msg, 0);
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			free(buf);
 			free(data);
 			#ifdef DEBUG
@@ -472,7 +480,9 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			dfsmsg->msg_type = GETATTR_RESP;
 			sendmsg(soc, msg, 0);
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			free(buf);
 			free(data);
 			#ifdef DEBUG
@@ -495,8 +505,10 @@ void* handle_client_request(void *arg)
 					#ifdef DEBUG
 					printf("sent the file name\n",temp->file_name);
 					#endif
+					pthread_mutex_lock(&seq_mutex);
 					free_msg(msg);
 					prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+					pthread_mutex_unlock(&seq_mutex);
 					recvmsg(soc,msg,0);
 					#ifdef DEBUG
 					printf("Received request for stat\n");
@@ -507,8 +519,10 @@ void* handle_client_request(void *arg)
 					#ifdef DEBUG
 					printf("sent the stat\n");
 					#endif
+					pthread_mutex_lock(&seq_mutex);
 					free_msg(msg);
 					prepare_msg(READDIR_REQ,&msg,buf,MAX_BUF_SZ);
+					pthread_mutex_unlock(&seq_mutex);
 					recvmsg(soc,msg,0);
 					#ifdef DEBUG
 					printf("request for next record\n");
@@ -524,7 +538,9 @@ void* handle_client_request(void *arg)
 #ifdef DEBUG
 			printf("sent the last message on readdir\n");
 #endif
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			break;
 
 		case READ_REQ:
@@ -599,7 +615,9 @@ void* handle_client_request(void *arg)
 				dfsmsg->status = retval;
 				dfsmsg->msg_type = READ_RESP;
 				sendmsg(soc, msg, 0);
+				pthread_mutex_lock(&seq_mutex);
 				free_msg(msg);
+				pthread_mutex_unlock(&seq_mutex);
 			
 			break;
 
@@ -669,8 +687,10 @@ void* handle_client_request(void *arg)
 						pthread_mutex_unlock(&seq_mutex);
 					}
 					c->last_read = 1;
+					pthread_mutex_lock(&seq_mutex);
 					add_tochunklist(c,0);
 					add_tochunklist(c,1);
+					pthread_mutex_unlock(&seq_mutex);
 
 					/* TODO: Commit the chunk only when write-done message is received from client */
 					//c->chunk_size = size;
@@ -736,7 +756,9 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			sendmsg(soc, msg, 0);
 			dfsmsg->msg_type = WRITE_RESP;
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			break;
 
 		case WRITE_COMMIT_REQ:
@@ -826,7 +848,9 @@ void* handle_client_request(void *arg)
 			dfsmsg->status = retval;
 			sendmsg(soc, msg, 0);
 			dfsmsg->msg_type = WRITE_COMMIT_RESP;
+			pthread_mutex_lock(&seq_mutex);
 			free_msg(msg);
+			pthread_mutex_unlock(&seq_mutex);
 			break;
 	}
 }
