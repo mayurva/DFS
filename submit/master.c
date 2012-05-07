@@ -320,19 +320,7 @@ void* handle_client_request(void *arg)
 			/* File exists */
 			} else {
 				/* File is being opened */
-				if(open_req_obj->flags & O_CREAT){
-					if ((open_req_obj->flags & O_RDONLY) || (open_req_obj->flags & O_RDWR) || (open_req_obj->flags & O_APPEND)) {
-						#ifdef DEBUG	
-						printf("File opened for read/write\n");
-						#endif
-						retval = 0;
-					} else {
-						#ifdef DEBUG	
-						printf("File already present\n");
-						#endif
-						retval = -1;
-					}
-				} else if (((file_info*)ep->data)->is_deleted == 1) {
+				if (((file_info*)ep->data)->is_deleted == 1) {
 
 					/* File is being created */
 					if(open_req_obj->flags & O_CREAT) {
@@ -382,6 +370,18 @@ void* handle_client_request(void *arg)
 						retval = -1;
 					}
 
+				} else if(open_req_obj->flags & O_CREAT){
+					if ((open_req_obj->flags & O_RDONLY) || (open_req_obj->flags & O_RDWR) || (open_req_obj->flags & O_APPEND)) {
+						#ifdef DEBUG	
+						printf("File opened for read/write\n");
+						#endif
+						retval = 0;
+					} else {
+						#ifdef DEBUG	
+						printf("File already present\n");
+						#endif
+						retval = -1;
+					}
 					/* File exists */
 				/* File to to opened is found at master - success */
 				} else {
