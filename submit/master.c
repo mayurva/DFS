@@ -373,6 +373,7 @@ void* handle_client_request(void *arg)
 						new_file->filestat.st_atime = new_file->filestat.st_mtime = new_file->filestat.st_ctime = tv.tv_sec;
 						new_file->next = NULL;
 						new_file->is_deleted = 0;
+						retval = 0;
 
 					} else {
 #ifdef DEBUG	
