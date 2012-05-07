@@ -1,0 +1,25 @@
+SOURCE CODE DESCRIPTION
+- gfs.h
+Common header file for generic message format, message types and operation specific message formats.
+
+- master.h  master.c replication.c
+master module code and data structures. The file replication.c handles single chunkserver failure
+
+- tcp_utils.c
+tcp bases message transfer API using sockets 
+
+- chunkserver.h chunkserver.c
+chunkserver code and data structures
+
+- client.h client.c client_util.c
+fuse based client code 
+
+COMPILATION AND BUILDING
+we have provided a Makefile
+run "make" to build
+This will create 3 executables - master, client and chunkserver
+
+RUN
+To run master - ./master
+To run client - ./client <master-ip> <mount-dir> -d
+To run chunkserver - ./chunkserver <chunk-path> <master-ip> <heartbeat-port> <client-listen-port>
