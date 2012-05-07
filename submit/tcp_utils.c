@@ -273,9 +273,7 @@ void prepare_msg(int msg_type, struct msghdr **msg, void * data_ptr, int data_le
 	memset(dfsmsg, 0, sizeof(dfs_msg));
 	memset(iov, 0, sizeof(iov));
 
-	pthread_mutex_lock(&seq_mutex);
         dfsmsg->seq = seq_num++;
-	pthread_mutex_unlock(&seq_mutex);
 
         dfsmsg->msg_type = msg_type;
         dfsmsg->len =  data_len;
