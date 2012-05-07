@@ -472,7 +472,7 @@ void* handle_client_request(void *arg)
 				sprintf(str,"%lu %lu ", ((file_info*)ep->data)->filestat.st_ino, ((file_info*)ep->data)->filestat.st_size);
 				msg->msg_iov[1].iov_base = str; 
 				msg->msg_iov[1].iov_len = 200;
-				printf("ino size = %s\n", (char*)msg->msg_iov[1].iov_base);	
+				//printf("ino size = %s\n", (char*)msg->msg_iov[1].iov_base);	
 				retval = 0;
 			}
 
@@ -704,7 +704,9 @@ void* handle_client_request(void *arg)
 					/* Prepare response */
 					char * resp = (char*) malloc(SMALL_BUF);
 					sprintf(resp,"%s:%d:%s:%d:%s:",chunk_servers[c->chunkserver_id[0]].ip_addr,chunk_servers[c->chunkserver_id[0]].client_port,chunk_servers[c->chunkserver_id[1]].ip_addr,chunk_servers[c->chunkserver_id[1]].client_port,c->chunk_handle);
-					printf("response is %s\n",resp);
+					#ifdef DEBUG
+						printf("response is %s\n",resp);
+					#endif
 					msg->msg_iov[1].iov_base = resp;
 					msg->msg_iov[1].iov_len = strlen(resp)+1;
 

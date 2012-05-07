@@ -46,7 +46,7 @@ int write_block(int cs_id,chunk_info *chunk,char *chunk_data)
 	int len = strlen(data_ptr);
 	memcpy(data_ptr+len,chunk_data,chunk->chunk_size);
 
-	#ifdef DEBUG1
+	#ifdef DEBUG
 		int i;
 		printf("Data to be written is - \n");
 		for (i = 0; i < CHUNK_SIZE; i++) 
@@ -74,7 +74,7 @@ int write_block(int cs_id,chunk_info *chunk,char *chunk_data)
 			free(data_ptr);
 			return -1;
 	        } else {
-			printf("%s: Sent write request to new chunkserver %d\n",__func__,cs_id);
+			//printf("%s: Sent write request to new chunkserver %d\n",__func__,cs_id);
 		}
 		
 	        /* Reply from secondary chunkserver */
@@ -84,7 +84,7 @@ int write_block(int cs_id,chunk_info *chunk,char *chunk_data)
 			free(data_ptr);
 			return -1;
 	        } else {
-			printf("%s: Received write reply from secondary chunkserver\n",__func__,cs_id);
+			//printf("%s: Received write reply from secondary chunkserver\n",__func__,cs_id);
 		}
 		close(sock);
 	//pthread_mutex_unlock(&msg_mutex);
@@ -122,7 +122,7 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
                		printf("%s: read request sending to chunkserver failed\n",__func__);
 			return -1;
         	} else {
-               		printf("%s: Success: Sent read request\n",__func__);
+               		//printf("%s: Success: Sent read request\n",__func__);
 		}
 
 		/* Receive read-data reply from chunkserver */
@@ -134,7 +134,7 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
                		printf("%s: read reply from chunkserver failed\n",__func__);
 			return -1;
         	} else {
-       			printf("%s: Success: Received read reply from chunkserver\n",__func__);
+       			//printf("%s: Success: Received read reply from chunkserver\n",__func__);
 		}
 //	pthread_mutex_unlock(&msg_mutex);
 		/*TODO: process received data */
@@ -144,7 +144,7 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
 		/* Update number of bytes read */
 			int size = atoi(strtok_r(resp,":",&buf));
 			size_read += size;
-			#ifdef DEBUG1
+			#ifdef DEBUG
 				int i;
 				printf("Data read is - \n");
 				for (i = 0; i < resp->size; i++) 
@@ -160,7 +160,7 @@ int read_block(int cs_id,chunk_info * chunk,char **chunk_data)
 
 void re_replicate(int index)
 {
-	printf("inside re replicate\n");
+	//printf("inside re replicate\n");
 	int new_cs;
 	char *chunk_data;//=(char*)malloc(CHUNK_SIZE*sizeof(char));
 	chunklist_node *ptr = chunk_servers[index].head;	
@@ -173,31 +173,31 @@ void re_replicate(int index)
 		count++;
 		ptr = ptr -> next;
 	}
-	printf("%d chunks in the list",count);
+	//printf("%d chunks in the list",count);
 	ptr = chunk_servers[index].head;
 	while(1){
-		printf("inside while\n");
+		//printf("inside while\n");
 		chunklist_node *ptr1 = (chunklist_node*)malloc(sizeof(chunklist_node));
 		ptr1->chunk_ptr = ptr->chunk_ptr;
 		ptr1->other_cs = ptr->other_cs;
 		int diff = index && ptr->other_cs;
-		printf("diff is %d\n",diff);
+		//printf("diff is %d\n",diff);
 		new_cs = failover_array[index + ptr->other_cs - !diff][failover_array[index + ptr->other_cs - !diff][0]+1];
 		failover_array[index + ptr->other_cs - !diff][0] = !failover_array[index + ptr->other_cs - !diff][0];	
 		ptr->moved_cs = new_cs;
 		ptr1->moved_cs = -1;
 	
-		printf("re-replicating chunk %s from failed chunkserver %d.. copying from chunkserver %d to %d\n",ptr1->chunk_ptr->chunk_handle,index,ptr->other_cs,new_cs);		
+		//printf("re-replicating chunk %s from failed chunkserver %d.. copying from chunkserver %d to %d\n",ptr1->chunk_ptr->chunk_handle,index,ptr->other_cs,new_cs);		
 		if((ptr1->chunk_ptr)->chunkserver_id[0] == index)	ptr1->chunk_ptr->chunkserver_id[0] = new_cs;
 		else	ptr1->chunk_ptr->chunkserver_id[1] = new_cs;
 
-		printf("before reading\n");
+		//printf("before reading\n");
 		int bytes_read = read_block(ptr->other_cs,ptr1->chunk_ptr,&chunk_data);
 		if (bytes_read != ptr1->chunk_ptr->chunk_size) {
 			printf("\n Error reading chunk data from failed chunkserver");
 			return;
 		}
-		#ifdef DEBUG1
+		#ifdef DEBUG
 			int i;
 			printf("Data read is - \n");
 			for (i = 0; i < bytes_read; i++)
@@ -205,11 +205,11 @@ void re_replicate(int index)
 			printf("\n");
 		#endif
 		write_block(new_cs,ptr1->chunk_ptr,chunk_data);
-		printf("written\n");
+		//printf("written\n");
 		ptr = ptr -> next;
 		if(!ptr)
 			break;
-		printf("next object\n");
+		//printf("next object\n");
 	}
-	printf("finished re-replicating\n");
+	//printf("finished re-replicating\n");
 }
