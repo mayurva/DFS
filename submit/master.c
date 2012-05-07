@@ -655,7 +655,7 @@ void* handle_client_request(void *arg)
 					//TODO: what to do if a chunkserver is down - then it cannot be the primary or secondary for the new chunk
 
 					/* Assign primary chunkserver */
-					c->chunkserver_id[0] = (chunk_id+(((file_info*)ep->data)->num_of_chunks)) % NUM_CHUNKSERVERS;				
+					c->chunkserver_id[0] = (chunk_id) % NUM_CHUNKSERVERS;				
 					if (chunk_servers[c->chunkserver_id[0]].is_up == 0) {
 						c->chunkserver_id[0] = (c->chunkserver_id[0] + 1) % NUM_CHUNKSERVERS;
 					}
